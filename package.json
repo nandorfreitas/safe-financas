@@ -1,0 +1,17 @@
+{
+    "name": "safe-financas",
+    "version": "1.0.0",
+    "private": true,
+    "description": "SAFE Finanças - Controle financeiro pessoal e familiar",
+    "scripts": {
+        "install:all": "cd backend && npm install && cd ../frontend && npm install",
+        "dev:backend": "cd backend && npm run dev",
+        "dev:frontend": "cd frontend && npm run dev",
+        "dev": "npx concurrently --kill-others \"npm run dev:backend\" \"npm run dev:frontend\"",
+        "start": "cd backend && npm start",
+        "build": "cd frontend && npm run build"
+    },
+    "devDependencies": {
+        "concurrently": "^9.1.2"
+    }
+}
