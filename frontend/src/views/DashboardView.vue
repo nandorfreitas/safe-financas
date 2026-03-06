@@ -14,9 +14,12 @@
 
     <DashboardSummary :data="dashboard.data" />
 
-    <div class="view__section">
-      <BaseCard title="Orçamento por Categoria" subtitle="Acompanhamento mensal">
-        <CategoryBudget :categories="categoriesStore.budget" />
+    <div class="view__charts">
+      <BaseCard title="Gastos por Categoria" subtitle="Distribuição do mês">
+        <ExpensesPieChart :expenses="dashboard.expensesByCategory" />
+      </BaseCard>
+      <BaseCard title="Receitas vs Despesas" subtitle="Comparativo do mês">
+        <IncomeExpenseBar :data="dashboard.data" />
       </BaseCard>
     </div>
   </div>
@@ -27,7 +30,8 @@ import { ref, onMounted, watch } from 'vue'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseCard from '@/components/base/BaseCard.vue'
 import DashboardSummary from '@/components/financial/DashboardSummary.vue'
-import CategoryBudget from '@/components/financial/CategoryBudget.vue'
+import ExpensesPieChart from '@/components/financial/ExpensesPieChart.vue'
+import IncomeExpenseBar from '@/components/financial/IncomeExpenseBar.vue'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useCategoriesStore } from '@/stores/categories'
 
@@ -39,6 +43,7 @@ const competence = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).pa
 
 function fetchData() {
   dashboard.fetchDashboard(competence.value)
+  dashboard.fetchExpensesByCategory(competence.value)
   categoriesStore.fetchBudget(competence.value)
 }
 
@@ -103,9 +108,15 @@ onMounted(fetchData)
   text-align: center;
 }
 
-.view__section {
-  display: flex;
-  flex-direction: column;
+.view__charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .view__charts {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

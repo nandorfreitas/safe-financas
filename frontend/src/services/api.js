@@ -18,6 +18,8 @@ export default {
 
     // Credit Cards
     getCreditCards: () => api.get('/credit-cards'),
+    getCreditCardsWithInvoices: (competence) => api.get('/credit-cards/with-invoices', { params: { competence } }),
+    getCreditCardProjections: (id, months = 6) => api.get(`/credit-cards/${id}/projections`, { params: { months } }),
     getCreditCard: (id) => api.get(`/credit-cards/${id}`),
     getCreditCardInvoice: (id, competence) => api.get(`/credit-cards/${id}/invoice/${competence}`),
     createCreditCard: (data) => api.post('/credit-cards', data),
@@ -37,14 +39,22 @@ export default {
     getTransaction: (id) => api.get(`/transactions/${id}`),
     createTransaction: (data) => api.post('/transactions', data),
     updateTransaction: (id, data) => api.put(`/transactions/${id}`, data),
+    updateTransactionFuture: (id, data) => api.put(`/transactions/${id}/future`, data),
     deleteTransaction: (id) => api.delete(`/transactions/${id}`),
+    deleteTransactionFuture: (id) => api.delete(`/transactions/${id}/future`),
 
     // Dashboard
     getDashboard: (competence) => api.get(`/dashboard/${competence}`),
+    getExpensesByCategory: (competence) => api.get(`/dashboard/${competence}/expenses-by-category`),
 
     // Projection
     getProjection: (months = 12) => api.get('/projection', { params: { months } }),
 
     // Backup
-    downloadBackup: () => api.get('/backup', { responseType: 'blob' })
+    downloadBackup: () => api.get('/backup', { responseType: 'blob' }),
+    restoreBackup: (file) => {
+        return api.post('/backup/restore', file, {
+            headers: { 'Content-Type': 'application/octet-stream' }
+        })
+    }
 }

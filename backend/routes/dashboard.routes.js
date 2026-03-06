@@ -9,4 +9,11 @@ router.get('/:competence', (req, res, next) => {
     } catch (err) { next(err); }
 });
 
+router.get('/:competence/expenses-by-category', (req, res, next) => {
+    try {
+        const data = dashboardService.getExpensesByCategory(req.params.competence);
+        res.json(data);
+    } catch (err) { next(err); }
+});
+
 module.exports = router;

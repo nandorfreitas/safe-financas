@@ -4,6 +4,7 @@ import api from '@/services/api'
 export const useDashboardStore = defineStore('dashboard', {
     state: () => ({
         data: null,
+        expensesByCategory: [],
         loading: false,
         error: null
     }),
@@ -18,6 +19,15 @@ export const useDashboardStore = defineStore('dashboard', {
                 this.error = err.message
             } finally {
                 this.loading = false
+            }
+        },
+
+        async fetchExpensesByCategory(competence) {
+            try {
+                const { data } = await api.getExpensesByCategory(competence)
+                this.expensesByCategory = data
+            } catch (err) {
+                this.error = err.message
             }
         }
     }

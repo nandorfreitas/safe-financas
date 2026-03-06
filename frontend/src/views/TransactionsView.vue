@@ -31,6 +31,15 @@
         @cancel="closeModal"
       />
     </BaseModal>
+
+    <ConfirmDialog
+      v-model="showConfirm"
+      :title="confirmConfig.title"
+      :message="confirmConfig.message"
+      :variant="confirmConfig.variant"
+      :actions="confirmConfig.actions"
+      @select="handleConfirmAction"
+    />
   </div>
 </template>
 
@@ -38,6 +47,7 @@
 import { ref, onMounted, watch } from 'vue'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseModal from '@/components/base/BaseModal.vue'
+import ConfirmDialog from '@/components/base/ConfirmDialog.vue'
 import TransactionList from '@/components/financial/TransactionList.vue'
 import TransactionForm from '@/components/financial/TransactionForm.vue'
 import { useTransactionsStore } from '@/stores/transactions'
@@ -53,6 +63,10 @@ const creditCardsStore = useCreditCardsStore()
 const showModal = ref(false)
 const editing = ref(false)
 const editingTransaction = ref(null)
+
+const showConfirm = ref(false)
+const confirmConfig = ref({ title: '', message: '', variant: 'info', actions: [] })
+const pendingAction = ref(null)
 
 const today = new Date()
 const competence = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
@@ -86,18 +100,77 @@ function handleEdit(transaction) {
 }
 
 function handleDelete(transaction) {
-  if (confirm('Excluir esta transação?')) {
-    transactionsStore.deleteTransaction(transaction.id).then(fetchData)
+  if (transaction.fixed) {
+    pendingAction.value = { type: 'delete', transaction }
+    confirmConfig.value = {
+      title: 'Excluir transação fixa',
+      message: `"${transaction.description}" é uma transação fixa. Deseja excluir somente esta ou todas as futuras?`,
+      variant: 'danger',
+      actions: [
+        { label: 'Excluir somente esta', value: 'single', variant: 'secondary' },
+        { label: 'Excluir esta e todas futuras', value: 'future', variant: 'danger' }
+      ]
+    }
+    showConfirm.value = true
+  } else {
+    pendingAction.value = { type: 'delete', transaction }
+    confirmConfig.value = {
+      title: 'Excluir transação',
+      message: `Tem certeza que deseja excluir "${transaction.description}"?`,
+      variant: 'danger',
+      actions: [
+        { label: 'Excluir', value: 'single', variant: 'danger' }
+      ]
+    }
+    showConfirm.value = true
   }
 }
 
 async function handleSubmit(data) {
   if (editing.value && editingTransaction.value) {
-    await transactionsStore.updateTransaction(editingTransaction.value.id, data)
+    if (editingTransaction.value.fixed) {
+      pendingAction.value = { type: 'edit', id: editingTransaction.value.id, data }
+      confirmConfig.value = {
+        title: 'Editar transação fixa',
+        message: `"${editingTransaction.value.description}" é uma transação fixa. Aplicar a edição em quais ocorrências?`,
+        variant: 'info',
+        actions: [
+          { label: 'Somente nesta', value: 'single', variant: 'secondary' },
+          { label: 'Nesta e em todas futuras', value: 'future', variant: 'primary' }
+        ]
+      }
+      closeModal()
+      showConfirm.value = true
+      return
+    } else {
+      await transactionsStore.updateTransaction(editingTransaction.value.id, data)
+    }
   } else {
     await transactionsStore.createTransaction(data)
   }
   closeModal()
+  fetchData()
+}
+
+async function handleConfirmAction(value) {
+  const action = pendingAction.value
+  if (!action) return
+
+  if (action.type === 'delete') {
+    if (value === 'single') {
+      await transactionsStore.deleteTransaction(action.transaction.id)
+    } else if (value === 'future') {
+      await transactionsStore.deleteTransactionFuture(action.transaction.id)
+    }
+  } else if (action.type === 'edit') {
+    if (value === 'single') {
+      await transactionsStore.updateTransaction(action.id, action.data)
+    } else if (value === 'future') {
+      await transactionsStore.updateTransactionFuture(action.id, action.data)
+    }
+  }
+
+  pendingAction.value = null
   fetchData()
 }
 

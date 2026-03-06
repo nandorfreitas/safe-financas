@@ -20,10 +20,14 @@ const routes = [
         meta: { title: 'Contas' }
     },
     {
-        path: '/credit-cards',
+        path: '/cartoes',
         name: 'credit-cards',
-        component: () => import('@/views/CreditCardsView.vue'),
-        meta: { title: 'Cartões' }
+        component: () => import('../views/CreditCardsView.vue')
+    },
+    {
+        path: '/emprestimos',
+        name: 'loans',
+        component: () => import('../views/LoansView.vue')
     },
     {
         path: '/categories',

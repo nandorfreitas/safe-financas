@@ -10,6 +10,7 @@ const categoriesRoutes = require('./routes/categories.routes');
 const transactionsRoutes = require('./routes/transactions.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const projectionRoutes = require('./routes/projection.routes');
+const loansRoutes = require('./routes/loans.routes');
 const backupRoutes = require('./routes/backup.routes');
 
 const app = express();
@@ -28,6 +29,7 @@ app.use('/api/categories', categoriesRoutes);
 app.use('/api/transactions', transactionsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/projection', projectionRoutes);
+app.use('/api/loans', loansRoutes);
 app.use('/api/backup', backupRoutes);
 
 // Health check

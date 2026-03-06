@@ -31,6 +31,20 @@ router.post('/', (req, res, next) => {
     } catch (err) { next(err); }
 });
 
+router.put('/:id/future', (req, res, next) => {
+    try {
+        const result = transactionsService.updateFuture(req.params.id, req.body);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
+router.delete('/:id/future', (req, res, next) => {
+    try {
+        const result = transactionsService.deleteFuture(req.params.id);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
 router.put('/:id', (req, res, next) => {
     try {
         const transaction = transactionsService.update(req.params.id, req.body);

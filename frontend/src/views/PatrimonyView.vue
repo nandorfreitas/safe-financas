@@ -2,15 +2,12 @@
   <div class="view">
     <div class="view__header">
       <div>
-        <h1 class="view__title">Patrimônio</h1>
-        <p class="view__subtitle">Visão detalhada de ativos e passivos</p>
+        <h1 class="view__title">Reservas e Investimentos</h1>
+        <p class="view__subtitle">Acompanhamento do capital acumulado</p>
       </div>
     </div>
 
-    <PatrimonyCard
-      :accounts="accountsStore.balances"
-      :cards="creditCardsStore.cards"
-    />
+    <PatrimonyCard :accounts="accountsStore.balances" />
   </div>
 </template>
 
@@ -18,14 +15,11 @@
 import { onMounted } from 'vue'
 import PatrimonyCard from '@/components/financial/PatrimonyCard.vue'
 import { useAccountsStore } from '@/stores/accounts'
-import { useCreditCardsStore } from '@/stores/creditCards'
 
 const accountsStore = useAccountsStore()
-const creditCardsStore = useCreditCardsStore()
 
 onMounted(() => {
   accountsStore.fetchBalances()
-  creditCardsStore.fetchCards()
 })
 </script>
 

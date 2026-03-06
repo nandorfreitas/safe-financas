@@ -9,26 +9,46 @@
     </div>
 
     <div class="categories-grid">
-      <BaseCard v-for="cat in categoriesStore.categories" :key="cat.id">
-        <div class="category-item">
-          <div class="category-info">
-            <span class="category-name">{{ cat.name }}</span>
-            <div class="category-meta">
-              <BaseBadge :variant="cat.type === 'receita' ? 'success' : 'danger'">
-                {{ cat.type === 'receita' ? 'Receita' : 'Despesa' }}
+      <template v-for="parent in categoriesStore.categoryTree" :key="parent.id">
+        <BaseCard class="category-card--parent">
+          <div class="category-item">
+            <div class="category-info">
+              <span class="category-name">{{ parent.name }}</span>
+              <div class="category-meta">
+                <BaseBadge :variant="parent.type === 'receita' ? 'success' : parent.type === 'despesa' ? 'danger' : 'warning'">
+                {{ parent.type === 'receita' ? 'Receita' : parent.type === 'despesa' ? 'Despesa' : 'Transferência' }}
               </BaseBadge>
-              <BaseBadge v-if="cat.essential" variant="info">Essencial</BaseBadge>
-              <span v-if="cat.monthly_budget" class="category-budget">
-                Orçamento: {{ formatCurrency(cat.monthly_budget) }}
-              </span>
+                <BaseBadge v-if="parent.essential" variant="info">Essencial</BaseBadge>
+                <span v-if="parent.monthly_budget" class="category-budget">
+                  Orçamento: {{ formatCurrency(parent.monthly_budget) }}
+                </span>
+              </div>
+            </div>
+            <div class="category-actions">
+              <BaseButton variant="ghost" size="sm" @click="handleEdit(parent)">Editar</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="handleDelete(parent)">Excluir</BaseButton>
             </div>
           </div>
-          <div class="category-actions">
-            <BaseButton variant="ghost" size="sm" @click="handleEdit(cat)">Editar</BaseButton>
-            <BaseButton variant="ghost" size="sm" @click="handleDelete(cat)">Excluir</BaseButton>
+        </BaseCard>
+        
+        <BaseCard v-for="child in parent.children" :key="child.id" class="category-card--child">
+          <div class="category-item">
+            <div class="category-info">
+              <span class="category-name">{{ child.name }}</span>
+              <div class="category-meta">
+                <BaseBadge v-if="child.essential" variant="info">Essencial</BaseBadge>
+                <span v-if="child.monthly_budget" class="category-budget">
+                  Orçamento: {{ formatCurrency(child.monthly_budget) }}
+                </span>
+              </div>
+            </div>
+            <div class="category-actions">
+              <BaseButton variant="ghost" size="sm" @click="handleEdit(child)">Editar</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="handleDelete(child)">Excluir</BaseButton>
+            </div>
           </div>
-        </div>
-      </BaseCard>
+        </BaseCard>
+      </template>
     </div>
 
     <p v-if="!categoriesStore.categories.length && !categoriesStore.loading" class="empty-state">
@@ -38,7 +58,8 @@
     <BaseModal v-model="showModal" :title="editing ? 'Editar Categoria' : 'Nova Categoria'">
       <form @submit.prevent="handleSubmit" class="form">
         <BaseInput v-model="form.name" label="Nome" placeholder="Ex: Alimentação" />
-        <BaseSelect v-model="form.type" label="Tipo" :options="typeOptions" />
+        <BaseSelect v-model="form.type" label="Tipo" :options="typeOptions" :disabled="form.parent_id !== '' && form.parent_id !== null" />
+        <BaseSelect v-model="form.parent_id" label="Categoria Pai (opcional)" :options="parentCategoryOptions" placeholder="Nenhuma (Categoria Principal)" />
         <BaseInput v-model="form.monthly_budget" label="Orçamento Mensal (opcional)" type="number" step="0.01" placeholder="0,00" />
         <BaseCheckbox v-model="form.essential" label="Essencial" />
         <div class="form__actions">
@@ -51,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseModal from '@/components/base/BaseModal.vue'
 import BaseCard from '@/components/base/BaseCard.vue'
@@ -67,17 +88,40 @@ const showModal = ref(false)
 const editing = ref(false)
 const editingId = ref(null)
 
-const form = reactive({ name: '', type: 'despesa', monthly_budget: '', essential: false })
+const form = reactive({ name: '', type: 'despesa', monthly_budget: '', essential: false, parent_id: '' })
 
 const typeOptions = [
   { value: 'receita', label: 'Receita' },
-  { value: 'despesa', label: 'Despesa' }
+  { value: 'despesa', label: 'Despesa' },
+  { value: 'transferencia', label: 'Transferência' }
 ]
+
+const parentCategoryOptions = computed(() => {
+  return categoriesStore.parentCategories
+    .filter(c => c.type === form.type && c.id !== editingId.value)
+    .map(c => ({ value: c.id, label: c.name }))
+})
+
+// Auto-update type if parent changes
+watch(() => form.parent_id, (newParentId) => {
+  if (newParentId) {
+    const parent = categoriesStore.parentCategories.find(c => c.id === newParentId)
+    if (parent) {
+      form.type = parent.type
+    }
+  }
+})
 
 function handleEdit(cat) {
   editing.value = true
   editingId.value = cat.id
-  Object.assign(form, { name: cat.name, type: cat.type, monthly_budget: cat.monthly_budget || '', essential: !!cat.essential })
+  Object.assign(form, { 
+    name: cat.name, 
+    type: cat.type, 
+    monthly_budget: cat.monthly_budget || '', 
+    essential: !!cat.essential,
+    parent_id: cat.parent_id || '' 
+  })
   showModal.value = true
 }
 
@@ -91,7 +135,8 @@ async function handleSubmit() {
   const payload = {
     ...form,
     monthly_budget: form.monthly_budget ? parseFloat(form.monthly_budget) : null,
-    essential: form.essential ? 1 : 0
+    essential: form.essential ? 1 : 0,
+    parent_id: form.parent_id || null
   }
   if (editing.value) {
     await categoriesStore.updateCategory(editingId.value, payload)
@@ -105,7 +150,7 @@ function closeModal() {
   showModal.value = false
   editing.value = false
   editingId.value = null
-  Object.assign(form, { name: '', type: 'despesa', monthly_budget: '', essential: false })
+  Object.assign(form, { name: '', type: 'despesa', monthly_budget: '', essential: false, parent_id: '' })
 }
 
 function formatCurrency(value) {
@@ -121,6 +166,7 @@ onMounted(() => categoriesStore.fetchCategories())
 .view__title { font-size: var(--text-2xl); font-weight: var(--font-bold); color: var(--text-primary); }
 .view__subtitle { font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-1); }
 .categories-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+.category-card--child { margin-left: var(--space-8); border-left: 2px solid var(--border-subtle); }
 .category-item { display: flex; justify-content: space-between; align-items: center; }
 .category-info { display: flex; flex-direction: column; gap: var(--space-2); }
 .category-name { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-primary); }

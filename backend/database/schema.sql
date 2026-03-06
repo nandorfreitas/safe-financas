@@ -36,9 +36,10 @@ CREATE TABLE IF NOT EXISTS credit_cards (
 CREATE TABLE IF NOT EXISTS categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('receita', 'despesa')),
+  type TEXT NOT NULL CHECK (type IN ('receita', 'despesa', 'transferencia')),
   monthly_budget REAL,
-  essential INTEGER NOT NULL DEFAULT 0
+  essential INTEGER NOT NULL DEFAULT 0,
+  parent_id INTEGER REFERENCES categories(id) ON DELETE SET NULL
 );
 
 -- ============================================
@@ -72,3 +73,21 @@ CREATE INDEX IF NOT EXISTS idx_transactions_competence ON transactions(competenc
 CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_credit_card_id ON transactions(credit_card_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id);
+
+-- ============================================
+-- LOANS & FINANCING
+-- ============================================
+CREATE TABLE IF NOT EXISTS loans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('emprestimo_concedido', 'financiamento')),
+  total_amount REAL NOT NULL,
+  remaining_balance REAL NOT NULL,
+  total_installments INTEGER NOT NULL,
+  paid_installments INTEGER NOT NULL DEFAULT 0,
+  linked_category_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo', 'quitado')),
+  FOREIGN KEY (linked_category_id) REFERENCES categories(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_loans_category_id ON loans(linked_category_id);

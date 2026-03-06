@@ -8,9 +8,9 @@ class ProjectionService {
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth() + 1;
 
-        // Get current total saldo
+        // Use initial_balance (not current balance) to avoid double-counting transactions
         const accountBalances = accountsService.getAllBalances();
-        let saldoAcumulado = accountBalances.reduce((sum, a) => sum + a.balance, 0);
+        let saldoAcumulado = accountBalances.reduce((sum, a) => sum + a.initial_balance, 0);
 
         const projections = [];
 

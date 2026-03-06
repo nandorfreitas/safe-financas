@@ -7,12 +7,18 @@
       </div>
     </div>
 
+    <BaseCard title="Evolução Projetada" subtitle="Receitas, despesas e patrimônio ao longo dos meses">
+      <ProjectionChart :projections="projectionStore.projections" />
+    </BaseCard>
+
     <ProjectionTable :projections="projectionStore.projections" />
   </div>
 </template>
 
 <script setup>
 import { onMounted } from 'vue'
+import BaseCard from '@/components/base/BaseCard.vue'
+import ProjectionChart from '@/components/financial/ProjectionChart.vue'
 import ProjectionTable from '@/components/financial/ProjectionTable.vue'
 import { useProjectionStore } from '@/stores/projection'
 

@@ -42,6 +42,14 @@ export const useTransactionsStore = defineStore('transactions', {
         async deleteTransaction(id) {
             await api.deleteTransaction(id)
             this.transactions = this.transactions.filter(t => t.id !== id)
+        },
+
+        async deleteTransactionFuture(id) {
+            await api.deleteTransactionFuture(id)
+        },
+
+        async updateTransactionFuture(id, payload) {
+            await api.updateTransactionFuture(id, payload)
         }
     }
 })

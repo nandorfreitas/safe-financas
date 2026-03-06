@@ -50,12 +50,42 @@ class CreditCardsService {
         const cards = creditCardsRepository.findActive();
         return cards.map(card => {
             const invoice = transactionsRepository.getCreditCardInvoice(card.id, competence);
+            const projections = this.getProjections(card.id);
             return {
                 ...card,
                 invoice_total: invoice.total,
-                available: card.limit_total - invoice.total
+                projections
             };
         });
+    }
+
+    getProjections(creditCardId, months = 6) {
+        this.findById(creditCardId); // ensure card exists
+        const projections = [];
+
+        let currentDate = new Date();
+        // Start from next month
+        currentDate.setMonth(currentDate.getMonth() + 1);
+
+        for (let i = 0; i < months; i++) {
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const competence = `${year}-${month}`;
+
+            const invoice = transactionsRepository.getCreditCardInvoice(creditCardId, competence);
+
+            if (invoice.total > 0) {
+                projections.push({
+                    competence,
+                    total: invoice.total
+                });
+            }
+
+            // advance 1 month
+            currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+
+        return projections;
     }
 }
 

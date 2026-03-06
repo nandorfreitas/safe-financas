@@ -27,6 +27,29 @@ function initializeSchema() {
     .join('\n');
 
   db.exec(cleanedSchema);
+  runMigrations();
+}
+
+function runMigrations() {
+  const migrationsDir = path.join(__dirname, 'migrations');
+  if (!fs.existsSync(migrationsDir)) return;
+
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+    // Execute each statement independently so ALTER TABLE doesn't fail if column already exists
+    const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0 && !s.startsWith('--'));
+    for (const stmt of statements) {
+      try {
+        db.exec(stmt);
+      } catch (err) {
+        // Ignore "duplicate column" errors from re-running migrations
+        if (!err.message.includes('duplicate column')) {
+          console.error(`Migration error in ${file}: ${err.message}`);
+        }
+      }
+    }
+  }
 }
 
 function closeDatabase() {

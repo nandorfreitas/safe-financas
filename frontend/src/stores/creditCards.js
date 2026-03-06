@@ -12,7 +12,8 @@ export const useCreditCardsStore = defineStore('creditCards', {
         async fetchCards() {
             this.loading = true
             try {
-                const { data } = await api.getCreditCards()
+                const competence = new Date().toISOString().slice(0, 7)
+                const { data } = await api.getCreditCardsWithInvoices(competence)
                 this.cards = data
             } catch (err) {
                 this.error = err.message

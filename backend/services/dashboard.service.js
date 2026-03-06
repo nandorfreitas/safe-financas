@@ -41,6 +41,44 @@ class DashboardService {
             cartoes: cardInvoices
         };
     }
-}
 
+    getExpensesByCategory(competence) {
+        const { getDatabase } = require('../database/db');
+        const db = getDatabase();
+
+        // Get all expense transactions for this competence, grouped by category
+        // Roll up child categories into their parent
+        const rows = db.prepare(`
+            SELECT 
+                COALESCE(parent.id, c.id) as category_id,
+                COALESCE(parent.name, c.name) as category_name,
+                SUM(t.amount) as total
+            FROM transactions t
+            LEFT JOIN categories c ON c.id = t.category_id
+            LEFT JOIN categories parent ON parent.id = c.parent_id
+            WHERE t.competence = ? AND t.type = 'despesa'
+            GROUP BY COALESCE(parent.id, c.id)
+            ORDER BY total DESC
+        `).all(competence);
+
+        // Handle uncategorized transactions (category_id is null)
+        const uncategorized = db.prepare(`
+            SELECT SUM(amount) as total
+            FROM transactions
+            WHERE competence = ? AND type = 'despesa' AND category_id IS NULL
+        `).get(competence);
+
+        const result = rows.filter(r => r.category_id !== null);
+
+        if (uncategorized && uncategorized.total > 0) {
+            result.push({
+                category_id: null,
+                category_name: 'Sem categoria',
+                total: uncategorized.total
+            });
+        }
+
+        return result.sort((a, b) => b.total - a.total);
+    }
+}
 module.exports = new DashboardService();

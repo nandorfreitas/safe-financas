@@ -13,17 +13,9 @@
         <span class="summary-card__label">Resultado</span>
         <span class="summary-card__value">{{ formatCurrency(data?.resultado || 0) }}</span>
       </div>
-      <div class="summary-card summary-card--info">
-        <span class="summary-card__label">Saldo das Contas</span>
-        <span class="summary-card__value">{{ formatCurrency(data?.saldo_contas || 0) }}</span>
-      </div>
       <div class="summary-card summary-card--warning">
         <span class="summary-card__label">Cartões</span>
         <span class="summary-card__value">{{ formatCurrency(data?.total_cartao || 0) }}</span>
-      </div>
-      <div class="summary-card summary-card--patrimonio">
-        <span class="summary-card__label">Patrimônio Líquido</span>
-        <span class="summary-card__value">{{ formatCurrency(data?.patrimonio?.patrimonio_liquido || 0) }}</span>
       </div>
     </div>
   </div>

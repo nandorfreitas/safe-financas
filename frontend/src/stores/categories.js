@@ -11,7 +11,49 @@ export const useCategoriesStore = defineStore('categories', {
 
     getters: {
         receitas: (state) => state.categories.filter(c => c.type === 'receita'),
-        despesas: (state) => state.categories.filter(c => c.type === 'despesa')
+        despesas: (state) => state.categories.filter(c => c.type === 'despesa'),
+
+        parentCategories: (state) => state.categories.filter(c => !c.parent_id),
+
+        categoryTree: (state) => {
+            const tree = []
+            const map = new Map()
+
+            state.categories.forEach(cat => {
+                map.set(cat.id, { ...cat, children: [] })
+            })
+
+            state.categories.forEach(cat => {
+                if (cat.parent_id) {
+                    const parent = map.get(cat.parent_id)
+                    if (parent) parent.children.push(map.get(cat.id))
+                } else {
+                    tree.push(map.get(cat.id))
+                }
+            })
+
+            return tree
+        },
+
+        groupedOptions: (state) => {
+            const tree = useCategoriesStore().categoryTree
+            const options = []
+
+            tree.forEach(parent => {
+                options.push({ value: parent.id, label: parent.name, type: parent.type })
+                if (parent.children && parent.children.length > 0) {
+                    parent.children.forEach(child => {
+                        options.push({
+                            value: child.id,
+                            label: `${parent.name} - ${child.name}`,
+                            type: child.type
+                        })
+                    })
+                }
+            })
+
+            return options
+        }
     },
 
     actions: {
