@@ -155,18 +155,20 @@ class TransactionsRepository {
         COALESCE(SUM(CASE WHEN type = 'receita' AND status = 'pago' THEN amount ELSE 0 END), 0) as receitas,
         COALESCE(SUM(CASE WHEN type = 'despesa' AND credit_card_id IS NULL AND status = 'pago' THEN amount ELSE 0 END), 0) as despesas,
         COALESCE(SUM(CASE WHEN type = 'transferencia' AND account_id = ? AND status = 'pago' THEN amount ELSE 0 END), 0) as transferencias_saida,
-        COALESCE(SUM(CASE WHEN type = 'transferencia' AND subtype = CAST(? AS TEXT) AND status = 'pago' THEN amount ELSE 0 END), 0) as transferencias_entrada
+        COALESCE(SUM(CASE WHEN type = 'transferencia' AND CAST(subtype AS INTEGER) = ? AND status = 'pago' THEN amount ELSE 0 END), 0) as transferencias_entrada
       FROM transactions
-      WHERE (account_id = ? OR subtype = CAST(? AS TEXT))
+      WHERE (account_id = ? OR CAST(subtype AS INTEGER) = ?)
     `).get(accountId, accountId, accountId, accountId);
   }
 
   getCreditCardInvoice(creditCardId, competence) {
     const db = getDatabase();
     return db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total
+      SELECT 
+        COALESCE(SUM(CASE WHEN type = 'despesa' THEN amount ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN type = 'transferencia' THEN amount ELSE 0 END), 0) as total
       FROM transactions
-      WHERE credit_card_id = ? AND competence = ? AND type = 'despesa'
+      WHERE credit_card_id = ? AND competence = ? AND status != 'cancelado'
     `).get(creditCardId, competence);
   }
 

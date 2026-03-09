@@ -2,9 +2,14 @@
   <BaseCard hoverable>
     <template #header>
       <div class="account-header">
-        <div>
-          <h4 class="account-name">{{ account.name }}</h4>
-          <BaseBadge>{{ typeLabel }}</BaseBadge>
+        <div class="account-title-wrap">
+          <span class="brand-badge" :style="{ backgroundColor: getBrandDetails(account.name, 'bank').color, color: getBrandDetails(account.name, 'bank').text }">
+            {{ getBrandDetails(account.name, 'bank').initial }}
+          </span>
+          <div>
+            <h4 class="account-name">{{ account.name }}</h4>
+            <BaseBadge>{{ typeLabel }}</BaseBadge>
+          </div>
         </div>
         <div class="account-actions">
           <BaseButton variant="ghost" size="sm" @click="$emit('edit', account)">Editar</BaseButton>
@@ -32,6 +37,7 @@ import { computed } from 'vue'
 import BaseCard from '@/components/base/BaseCard.vue'
 import BaseBadge from '@/components/base/BaseBadge.vue'
 import BaseButton from '@/components/base/BaseButton.vue'
+import { getBrandDetails } from '@/utils/brand'
 
 const props = defineProps({
   account: { type: Object, required: true }
@@ -52,6 +58,28 @@ function formatCurrency(value) {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.account-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1 1 160px;
+}
+
+.brand-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: var(--font-bold);
+  flex-shrink: 0;
 }
 
 .account-name {
@@ -59,11 +87,18 @@ function formatCurrency(value) {
   font-weight: var(--font-semibold);
   color: var(--text-primary);
   margin-bottom: var(--space-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .account-actions {
   display: flex;
+  align-items: center;
   gap: var(--space-1);
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .account-body {

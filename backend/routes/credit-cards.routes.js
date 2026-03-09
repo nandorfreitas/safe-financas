@@ -39,6 +39,17 @@ router.get('/:id/projections', (req, res, next) => {
     } catch (err) { next(err); }
 });
 
+router.post('/:id/pay-invoice', (req, res, next) => {
+    try {
+        const { competence, amount } = req.body;
+        if (!competence) {
+            return res.status(400).json({ message: 'Competência é obrigatória' });
+        }
+        const transaction = creditCardsService.payInvoice(req.params.id, competence, amount);
+        res.status(201).json(transaction);
+    } catch (err) { next(err); }
+});
+
 router.post('/', (req, res, next) => {
     try {
         const card = creditCardsService.create(req.body);

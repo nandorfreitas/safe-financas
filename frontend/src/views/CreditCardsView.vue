@@ -13,6 +13,7 @@
         v-for="card in creditCardsStore.cards"
         :key="card.id"
         :card="card"
+        @pay-invoice="handlePayInvoice"
         @edit="handleEdit"
         @delete="handleDelete"
       />
@@ -36,6 +37,42 @@
         </div>
       </form>
     </BaseModal>
+
+    <BaseModal v-model="showPayModal" :title="`Pagar Fatura - ${payModalCard?.name}`">
+      <div v-if="payModalCard" class="form">
+        <div class="pay-info">
+          <div class="pay-info__item">
+            <span class="pay-info__label">Fatura Atual</span>
+            <span class="pay-info__value">{{ formatCurrency(payModalCard.invoice_total) }}</span>
+          </div>
+          <div class="pay-info__item">
+            <span class="pay-info__label">Conta de Pagamento</span>
+            <span class="pay-info__value">{{ payModalCard.payment_account_name }}</span>
+          </div>
+        </div>
+        
+        <BaseInput 
+          v-model="payModalAmount" 
+          label="Valor do Pagamento" 
+          type="number" 
+          step="0.01" 
+          min="0.01"
+        />
+        
+        <div class="pay-quick-actions">
+          <BaseButton variant="ghost" size="sm" type="button" @click="payModalAmount = payModalCard.invoice_total">
+            Preencher valor total
+          </BaseButton>
+        </div>
+
+        <div class="form__actions">
+          <BaseButton variant="secondary" @click="closePayModal">Cancelar</BaseButton>
+          <BaseButton @click="submitPayInvoice" :disabled="!payModalAmount || payModalAmount <= 0">
+            Confirmar Pagamento
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -56,6 +93,13 @@ const accountsStore = useAccountsStore()
 const showModal = ref(false)
 const editing = ref(false)
 const editingId = ref(null)
+
+const showPayModal = ref(false)
+const payModalCard = ref(null)
+const payModalAmount = ref(0)
+
+const today = new Date()
+const competence = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
 
 const form = reactive({ name: '', limit_total: 0, closing_day: 1, due_day: 10, payment_account_id: '', active: true })
 
@@ -81,6 +125,41 @@ function handleDelete(card) {
   if (confirm('Excluir este cartão?')) {
     creditCardsStore.deleteCard(card.id)
   }
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+}
+
+function handlePayInvoice(card) {
+  payModalCard.value = card
+  payModalAmount.value = card.invoice_total || 0
+  showPayModal.value = true
+}
+
+async function submitPayInvoice() {
+  if (!payModalCard.value) return
+  
+  if (!payModalAmount.value || payModalAmount.value <= 0) {
+    alert('Por favor, informe um valor válido para o pagamento.')
+    return
+  }
+  
+  try {
+    const card = payModalCard.value
+    await creditCardsStore.payInvoice(card.id, competence.value, payModalAmount.value)
+    accountsStore.fetchAccounts() // Refresh accounts to get updated balance
+    alert('Fatura paga com sucesso!')
+    closePayModal()
+  } catch (err) {
+    alert(err.response?.data?.message || 'Erro ao pagar fatura')
+  }
+}
+
+function closePayModal() {
+  showPayModal.value = false
+  payModalCard.value = null
+  payModalAmount.value = 0
 }
 
 async function handleSubmit() {
@@ -122,4 +201,9 @@ onMounted(() => {
 .form { display: flex; flex-direction: column; gap: var(--space-4); }
 .form__actions { display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
 .empty-state { text-align: center; color: var(--text-tertiary); font-size: var(--text-sm); padding: var(--space-10) 0; }
+.pay-info { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); background: var(--bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--space-2); }
+.pay-info__item { display: flex; justify-content: space-between; align-items: center; }
+.pay-info__label { font-size: var(--text-sm); color: var(--text-secondary); }
+.pay-info__value { font-size: var(--text-md); font-weight: var(--font-semibold); color: var(--text-primary); }
+.pay-quick-actions { display: flex; justify-content: flex-end; margin-top: -var(--space-2); }
 </style>

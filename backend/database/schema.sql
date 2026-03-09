@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   launch_date TEXT NOT NULL,
   competence TEXT NOT NULL,
   due_date TEXT,
-  status TEXT NOT NULL DEFAULT 'previsto' CHECK (status IN ('previsto', 'pago')),
+  status TEXT NOT NULL DEFAULT 'previsto' CHECK (status IN ('previsto', 'pago', 'cartao')),
   fixed INTEGER NOT NULL DEFAULT 0,
   installment_total INTEGER DEFAULT 1,
   installment_number INTEGER DEFAULT 1,

@@ -7,7 +7,10 @@
     <div v-else class="budget__list">
       <div v-for="cat in mainCategories" :key="cat.id" class="budget__item">
         <div class="budget__header">
-          <span class="budget__name">{{ cat.name }}</span>
+          <div class="brand-cell">
+            <span class="brand-dot" :style="{ backgroundColor: getBrandDetails(cat.name, 'tag').color }"></span>
+            <span class="budget__name">{{ cat.name }}</span>
+          </div>
           <span class="budget__status" :class="statusClass(cat)">
             {{ cat.percentage !== null ? cat.percentage + '%' : '—' }}
           </span>
@@ -51,6 +54,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { getBrandDetails } from '@/utils/brand'
 
 const props = defineProps({
   categories: { type: Array, default: () => [] }
@@ -151,6 +155,19 @@ function formatCurrency(value) {
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
+}
+
+.brand-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .budget__status {

@@ -2,11 +2,24 @@
   <BaseCard hoverable>
     <template #header>
       <div class="card-header">
-        <div>
-          <h4 class="card-name">{{ card.name }}</h4>
-          <span class="card-meta">Fecha dia {{ card.closing_day }} · Vence dia {{ card.due_day }}</span>
+        <div class="card-title-wrap">
+          <span class="brand-badge" :style="{ backgroundColor: getBrandDetails(card.name, 'card').color, color: getBrandDetails(card.name, 'card').text }">
+            {{ getBrandDetails(card.name, 'card').initial }}
+          </span>
+          <div>
+            <h4 class="card-name">{{ card.name }}</h4>
+            <span class="card-meta">Fecha dia {{ card.closing_day }} · Vence dia {{ card.due_day }}</span>
+          </div>
         </div>
         <div class="card-actions">
+          <BaseButton 
+            v-if="card.invoice_total > 0 && card.payment_account_name" 
+            variant="primary" 
+            size="sm" 
+            @click="$emit('pay-invoice', card)"
+          >
+            Pagar Fatura
+          </BaseButton>
           <BaseButton variant="ghost" size="sm" @click="$emit('edit', card)">Editar</BaseButton>
           <BaseButton variant="ghost" size="sm" @click="$emit('delete', card)">Excluir</BaseButton>
         </div>
@@ -34,7 +47,10 @@
     </div>
 
     <div v-if="card.payment_account_name" class="card-footer-info">
-      Pagamento: {{ card.payment_account_name }}
+      <div class="brand-cell">
+        <span class="brand-dot" :style="{ backgroundColor: getBrandDetails(card.payment_account_name, 'bank').color }"></span>
+        <span>Pagamento: <strong>{{ card.payment_account_name }}</strong></span>
+      </div>
     </div>
   </BaseCard>
 </template>
@@ -43,12 +59,13 @@
 import { computed } from 'vue'
 import BaseCard from '@/components/base/BaseCard.vue'
 import BaseButton from '@/components/base/BaseButton.vue'
+import { getBrandDetails } from '@/utils/brand'
 
 const props = defineProps({
   card: { type: Object, required: true }
 })
 
-defineEmits(['edit', 'delete'])
+defineEmits(['edit', 'delete', 'pay-invoice'])
 
 const projections = computed(() => props.card.projections || [])
 
@@ -70,12 +87,50 @@ function formatMonth(competence) {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.brand-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: var(--font-bold);
+  flex-shrink: 0;
+}
+
+.brand-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .card-name {
   font-size: var(--text-md);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-meta {
@@ -83,11 +138,18 @@ function formatMonth(competence) {
   color: var(--text-tertiary);
   margin-top: var(--space-1);
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-actions {
   display: flex;
+  align-items: center;
   gap: var(--space-1);
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .card-body {

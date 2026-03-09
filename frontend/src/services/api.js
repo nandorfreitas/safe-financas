@@ -25,6 +25,7 @@ export default {
     createCreditCard: (data) => api.post('/credit-cards', data),
     updateCreditCard: (id, data) => api.put(`/credit-cards/${id}`, data),
     deleteCreditCard: (id) => api.delete(`/credit-cards/${id}`),
+    payInvoice: (id, competence, amount) => api.post(`/credit-cards/${id}/pay-invoice`, { competence, amount }),
 
     // Categories
     getCategories: () => api.get('/categories'),

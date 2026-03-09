@@ -38,6 +38,12 @@ export const useCreditCardsStore = defineStore('creditCards', {
         async deleteCard(id) {
             await api.deleteCreditCard(id)
             this.cards = this.cards.filter(c => c.id !== id)
+        },
+
+        async payInvoice(cardId, competence, amount) {
+            const { data } = await api.payInvoice(cardId, competence, amount)
+            await this.fetchCards()
+            return data
         }
     }
 })

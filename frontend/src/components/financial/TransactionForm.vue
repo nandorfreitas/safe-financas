@@ -92,6 +92,15 @@ watch(() => form.installment_total, (val) => {
   if (parseInt(val) > 1) form.fixed = false
 })
 
+// Auto-select status "cartao" when a credit card is chosen
+watch(() => form.credit_card_id, (val) => {
+  if (val && form.status === 'previsto') {
+    form.status = 'cartao'
+  } else if (!val && form.status === 'cartao') {
+    form.status = 'previsto'
+  }
+})
+
 const typeOptions = [
   { value: 'receita', label: 'Receita' },
   { value: 'despesa', label: 'Despesa' },
@@ -100,7 +109,8 @@ const typeOptions = [
 
 const statusOptions = [
   { value: 'previsto', label: 'Previsto' },
-  { value: 'pago', label: 'Pago' }
+  { value: 'pago', label: 'Pago' },
+  { value: 'cartao', label: 'Cartão' }
 ]
 
 const categoryOptions = computed(() => {
