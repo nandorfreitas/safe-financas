@@ -22,16 +22,17 @@ class DashboardService {
 
         // Patrimony
         const ativos = totalAccounts;
-        const passivos = totalCartao;
+        const passivos = totalCartao; // total unpaid invoices
         const patrimonio_liquido = ativos - passivos;
 
         return {
             competence,
             total_receitas: sums.total_receitas,
-            total_despesas: sums.total_despesas + sums.total_cartao,
-            resultado,
+            total_despesas: sums.total_despesas,
+            total_gastos_cartao: sums.total_cartao,
+            faturas_pendentes: totalCartao, // unpaid invoices
+            resultado, // receitas - despesas - gastos_cartao
             saldo_contas: totalAccounts,
-            total_cartao: totalCartao,
             patrimonio: {
                 ativos,
                 passivos,

@@ -123,7 +123,7 @@ class CreditCardsService {
             description: `Pagamento fatura ${card.name} - ${formattedMonth}`,
             amount: amountToPay,
             type: 'transferencia',
-            category_id: null,
+            category_id: category.id,
             account_id: card.payment_account_id,
             credit_card_id: creditCardId,
             launch_date: today,

@@ -21,13 +21,27 @@
       <!-- Despesas -->
       <div class="ie-bars__row">
         <div class="ie-bars__label">
-          <span class="ie-bars__label-text">Despesas</span>
+          <span class="ie-bars__label-text">Despesas (Débito, pix, pagamentos de contas)</span>
           <span class="ie-bars__label-value ie-bars__label-value--danger">{{ formatCurrency(despesas) }}</span>
         </div>
         <div class="ie-bars__track">
           <div
             class="ie-bars__fill ie-bars__fill--danger"
             :style="{ width: barWidth(despesas) + '%' }"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Gastos no Crédito -->
+      <div class="ie-bars__row">
+        <div class="ie-bars__label">
+          <span class="ie-bars__label-text">Gastos no Crédito</span>
+          <span class="ie-bars__label-value ie-bars__label-value--danger">{{ formatCurrency(gastos_cartao) }}</span>
+        </div>
+        <div class="ie-bars__track">
+          <div
+            class="ie-bars__fill ie-bars__fill--danger"
+            :style="{ width: barWidth(gastos_cartao) + '%' }"
           ></div>
         </div>
       </div>
@@ -50,10 +64,11 @@ const props = defineProps({
 
 const receitas = computed(() => props.data?.total_receitas || 0)
 const despesas = computed(() => props.data?.total_despesas || 0)
+const gastos_cartao = computed(() => props.data?.total_gastos_cartao || 0)
 const resultado = computed(() => props.data?.resultado || 0)
 const hasData = computed(() => receitas.value > 0 || despesas.value > 0)
 
-const maxVal = computed(() => Math.max(receitas.value, despesas.value) || 1)
+const maxVal = computed(() => Math.max(receitas.value, despesas.value, gastos_cartao.value) || 1)
 
 function barWidth(value) {
   return Math.min((value / maxVal.value) * 100, 100)

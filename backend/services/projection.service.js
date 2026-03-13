@@ -29,16 +29,17 @@ class ProjectionService {
 
             // Card debt for this month
             const cardInvoices = creditCardsService.getAllInvoices(competence);
-            const totalCartao = cardInvoices.reduce((sum, c) => sum + c.invoice_total, 0);
+            const faturas_pendentes = cardInvoices.reduce((sum, c) => sum + c.invoice_total, 0);
 
             projections.push({
                 competence,
                 receitas,
-                despesas,
+                despesas, // includes non-card despesas and total_cartao (card expenses)
                 resultado,
                 saldo_acumulado: saldoAcumulado,
-                total_cartao: totalCartao,
-                patrimonio_projetado: saldoAcumulado - totalCartao
+                total_gastos_cartao: sums.total_cartao,
+                faturas_pendentes,
+                patrimonio_projetado: saldoAcumulado - faturas_pendentes
             });
         }
 

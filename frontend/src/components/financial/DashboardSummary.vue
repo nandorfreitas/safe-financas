@@ -6,16 +6,20 @@
         <span class="summary-card__value">{{ formatCurrency(data?.total_receitas || 0) }}</span>
       </div>
       <div class="summary-card summary-card--despesa">
-        <span class="summary-card__label">Despesas</span>
+        <span class="summary-card__label">Despesas (Débito)</span>
         <span class="summary-card__value">{{ formatCurrency(data?.total_despesas || 0) }}</span>
       </div>
-      <div class="summary-card" :class="resultClass">
-        <span class="summary-card__label">Resultado</span>
-        <span class="summary-card__value">{{ formatCurrency(data?.resultado || 0) }}</span>
+      <div class="summary-card summary-card--cartao">
+        <span class="summary-card__label">Gastos no Crédito</span>
+        <span class="summary-card__value">{{ formatCurrency(data?.total_gastos_cartao || 0) }}</span>
       </div>
       <div class="summary-card summary-card--warning">
-        <span class="summary-card__label">Cartões</span>
-        <span class="summary-card__value">{{ formatCurrency(data?.total_cartao || 0) }}</span>
+        <span class="summary-card__label">Faturas Pendentes</span>
+        <span class="summary-card__value">{{ formatCurrency(data?.faturas_pendentes || 0) }}</span>
+      </div>
+      <div class="summary-card" :class="resultClass">
+        <span class="summary-card__label">Resultado (Geral)</span>
+        <span class="summary-card__value">{{ formatCurrency(data?.resultado || 0) }}</span>
       </div>
     </div>
   </div>
@@ -91,6 +95,9 @@ function formatCurrency(value) {
 
 .summary-card--warning { border-left: 3px solid var(--color-warning); }
 .summary-card--warning .summary-card__value { color: var(--color-warning); }
+
+.summary-card--cartao { border-left: 3px solid var(--color-danger); }
+.summary-card--cartao .summary-card__value { color: var(--color-danger); }
 
 .summary-card--patrimonio { border-left: 3px solid var(--btn-primary-bg); }
 .summary-card--patrimonio .summary-card__value { color: var(--btn-primary-bg); }

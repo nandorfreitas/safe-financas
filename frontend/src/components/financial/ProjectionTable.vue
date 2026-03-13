@@ -17,7 +17,10 @@
           {{ formatCurrency(value) }}
         </span>
       </template>
-      <template #cell-total_cartao="{ value }">
+      <template #cell-total_gastos_cartao="{ value }">
+        <span class="value value--info">{{ formatCurrency(value) }}</span>
+      </template>
+      <template #cell-faturas_pendentes="{ value }">
         <span class="value value--warning">{{ formatCurrency(value) }}</span>
       </template>
       <template #cell-patrimonio_projetado="{ value }">
@@ -39,10 +42,11 @@ defineProps({
 const columns = [
   { key: 'competence', label: 'Mês' },
   { key: 'receitas', label: 'Receitas' },
-  { key: 'despesas', label: 'Despesas' },
+  { key: 'despesas', label: 'Dinheiro' },
   { key: 'resultado', label: 'Resultado' },
   { key: 'saldo_acumulado', label: 'Saldo Acum.' },
-  { key: 'total_cartao', label: 'Cartões' },
+  { key: 'total_gastos_cartao', label: 'Cartões (Gasto)' },
+  { key: 'faturas_pendentes', label: 'Faturas (A Pagar)' },
   { key: 'patrimonio_projetado', label: 'Patrimônio' }
 ]
 
@@ -56,5 +60,6 @@ function formatCurrency(value) {
 .value--success { color: var(--color-success); }
 .value--danger { color: var(--color-danger); }
 .value--warning { color: var(--color-warning); }
+.value--info { color: var(--color-info); }
 .value--bold { font-weight: var(--font-semibold); }
 </style>
