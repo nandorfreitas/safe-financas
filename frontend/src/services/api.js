@@ -51,6 +51,19 @@ export default {
     // Projection
     getProjection: (months = 12) => api.get('/projection', { params: { months } }),
 
+    // Import
+    parseImportFile: (file, params) => {
+        const query = new URLSearchParams(params).toString()
+        return api.post(`/import/parse?${query}`, file, {
+            headers: { 'Content-Type': 'application/octet-stream' }
+        })
+    },
+    confirmImport: (data) => api.post('/import/confirm', data),
+
+    // Chat
+    sendChatMessage: (data) => api.post('/chat', data),
+    clearChatSession: (sessionId) => api.delete(`/chat/${sessionId}`),
+
     // Backup
     downloadBackup: () => api.get('/backup', { responseType: 'blob' }),
     restoreBackup: (file) => {

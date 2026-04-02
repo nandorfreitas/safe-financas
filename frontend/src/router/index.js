@@ -46,6 +46,12 @@ const routes = [
         name: 'patrimony',
         component: () => import('@/views/PatrimonyView.vue'),
         meta: { title: 'Patrimônio' }
+    },
+    {
+        path: '/import',
+        name: 'import',
+        component: () => import('@/views/ImportView.vue'),
+        meta: { title: 'Importar' }
     }
 ]
 

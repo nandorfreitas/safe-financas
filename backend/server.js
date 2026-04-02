@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -12,6 +13,8 @@ const dashboardRoutes = require('./routes/dashboard.routes');
 const projectionRoutes = require('./routes/projection.routes');
 const loansRoutes = require('./routes/loans.routes');
 const backupRoutes = require('./routes/backup.routes');
+const importRoutes = require('./routes/import.routes');
+const chatRoutes = require('./routes/chat.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +34,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/projection', projectionRoutes);
 app.use('/api/loans', loansRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/import', importRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

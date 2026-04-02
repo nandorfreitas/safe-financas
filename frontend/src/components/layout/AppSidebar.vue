@@ -105,6 +105,7 @@ const iconLoans = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" s
 const iconAccounts = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>'
 const iconCards = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>'
 const iconCategories = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>'
+const iconImport = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
 
 const mainNav = [
   { to: '/', label: 'Dashboard', icon: iconDashboard },
@@ -117,7 +118,8 @@ const mainNav = [
 const managementNav = [
   { to: '/accounts', label: 'Contas', icon: iconAccounts },
   { to: '/cartoes', label: 'Cartões', icon: iconCards },
-  { to: '/categories', label: 'Categorias', icon: iconCategories }
+  { to: '/categories', label: 'Categorias', icon: iconCategories },
+  { to: '/import', label: 'Importar', icon: iconImport }
 ]
 </script>
 

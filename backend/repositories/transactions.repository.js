@@ -207,6 +207,21 @@ class TransactionsRepository {
     return db.prepare(query).all(...params);
   }
 
+  findByDateAndAmount(dates, targetId, targetType) {
+    const db = getDatabase();
+    if (dates.length === 0) return [];
+
+    const placeholders = dates.map(() => '?').join(',');
+    const targetColumn = targetType === 'credit_card' ? 't.credit_card_id' : 't.account_id';
+
+    return db.prepare(`
+      SELECT t.id, t.description, t.amount, t.launch_date, t.type
+      FROM transactions t
+      WHERE t.launch_date IN (${placeholders})
+        AND ${targetColumn} = ?
+    `).all(...dates, targetId);
+  }
+
   deleteMany(ids) {
     const db = getDatabase();
     const placeholders = ids.map(() => '?').join(',');

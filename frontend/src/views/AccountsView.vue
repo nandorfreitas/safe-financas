@@ -10,7 +10,7 @@
 
     <div class="cards-grid">
       <AccountCard
-        v-for="account in accountsStore.balances"
+        v-for="account in accountsStore.balances.filter(a => a.type !== 'investimento')"
         :key="account.id"
         :account="account"
         @edit="handleEdit"
