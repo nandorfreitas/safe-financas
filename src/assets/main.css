@@ -35,6 +35,8 @@ a {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* Respeita a faixa inferior (home indicator) em telas com notch. */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Utilidades de grid para cards do dashboard. */
