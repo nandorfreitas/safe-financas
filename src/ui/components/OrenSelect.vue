@@ -151,7 +151,10 @@ function onUpdate(key: string) {
 <style>
 /* O conteúdo é teleportado para o body (fora do escopo) — estilos globais. */
 .oren-select__dropdown {
-  width: var(--reka-select-trigger-width);
+  /* Pelo menos a largura do gatilho, mas cresce com o conteúdo. */
+  min-width: var(--reka-select-trigger-width);
+  width: max-content;
+  max-width: min(420px, calc(100vw - 24px));
   background: var(--surface-default, #fff);
   border: 1px solid var(--border-default, #cdd5d1);
   border-radius: var(--radius-control, 8px);
@@ -174,6 +177,7 @@ function onUpdate(key: string) {
   cursor: pointer;
   user-select: none;
   outline: none;
+  white-space: nowrap;
 }
 
 .oren-select__option[data-highlighted] {
