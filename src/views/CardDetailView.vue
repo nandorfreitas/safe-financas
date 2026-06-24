@@ -11,8 +11,8 @@ import {
   OrenInput,
   OrenSelect,
   useToast,
-} from "@oren/design-system";
-import type { Column, SelectOption } from "@oren/design-system";
+} from "@/ui";
+import type { Column, SelectOption } from "@/ui";
 import MoneyInput from "@/components/MoneyInput.vue";
 import {
   useCards,
