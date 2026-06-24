@@ -18,7 +18,7 @@ import {
   useAccounts,
   useCategories,
   useTransactionsMonth,
-  useOpenInvoices,
+  useInvoicesMonth,
 } from "@/composables/useData";
 import {
   createTransaction,
@@ -47,10 +47,8 @@ const categories = useCategories();
 // Mês anterior (para copiar fixas) e faturas do mês (cartão como despesa).
 const prevComp = computed(() => addMeses(competencia.value, -1));
 const txsPrev = useTransactionsMonth(prevComp);
-const openInvoices = useOpenInvoices();
-const faturasMes = computed(() =>
-  openInvoices.value.filter((i) => i.competencia === competencia.value),
-);
+// Faturas do mês (abertas e pagas) — o cartão é uma despesa, mesmo após pago.
+const faturasMes = useInvoicesMonth(competencia);
 
 // Contas fixas do mês anterior ainda não presentes neste mês (por descrição).
 const fixasParaCopiar = computed(() => {
@@ -82,6 +80,7 @@ async function copiarFixas() {
         accountId: t.accountId,
         categoryId: t.categoryId,
         fixa: true,
+        essencial: t.essencial ?? false,
         descricao: t.descricao,
       });
     }
@@ -118,6 +117,9 @@ const filtroStatus = ref<"" | "previsto" | "realizado" | "pendente">("");
 
 const linhas = computed(() =>
   txs.value.filter((t) => {
+    // Compras de cartão não aparecem soltas aqui: o cartão entra como fatura
+    // (despesa) e o detalhe fica na tela do cartão.
+    if (t.cardId) return false;
     if (filtroTipo.value && t.tipo !== filtroTipo.value) return false;
     if (filtroStatus.value === "previsto" && !t.previsto) return false;
     if (filtroStatus.value === "realizado" && !t.realizado) return false;
@@ -126,8 +128,47 @@ const linhas = computed(() =>
   }),
 );
 
+// ── Segmentos: Receitas e Despesas (faturas de cartão entram em Despesas) ──
+interface Segmento {
+  key: TipoTransacao;
+  label: string;
+  rows: Transaction[];
+  faturas: typeof faturasMes.value;
+}
+
+const segmentos = computed<Segmento[]>(() => {
+  const segs: Segmento[] = [];
+  const recRows = linhas.value.filter((t) => t.tipo === "receita") as Transaction[];
+  const despRows = linhas.value.filter((t) => t.tipo === "despesa") as Transaction[];
+
+  if (filtroTipo.value !== "despesa") {
+    segs.push({ key: "receita", label: "Receitas", rows: recRows, faturas: [] });
+  }
+  if (filtroTipo.value !== "receita") {
+    segs.push({
+      key: "despesa",
+      label: "Despesas",
+      rows: despRows,
+      faturas: faturasMes.value,
+    });
+  }
+  return segs;
+});
+
+const semNada = computed(() =>
+  segmentos.value.every((s) => s.rows.length === 0 && s.faturas.length === 0),
+);
+
+// Total previsto do segmento (somando faturas de cartão quando despesa).
+function totalSegmento(seg: Segmento): number {
+  const rows = seg.rows.reduce((s, t) => s + prev(t), 0);
+  const fat = seg.faturas.reduce((s, f) => s + f.valorFinal, 0);
+  return rows + fat;
+}
+
 const columns: Column<Transaction>[] = [
-  { key: "data", label: "Data" },
+  { key: "data", label: "Vencimento" },
+  { key: "dataEfetivacao", label: "Efetivação" },
   { key: "descricao", label: "Descrição" },
   { key: "categoryId", label: "Categoria" },
   { key: "accountId", label: "Conta" },
@@ -167,6 +208,37 @@ function fmtData(ts: Transaction["data"]): string {
   }
 }
 
+// Data opcional (efetivação): "—" enquanto não houver.
+function fmtDataOpt(ts?: Transaction["dataEfetivacao"]): string {
+  if (!ts) return "—";
+  try {
+    return ts.toDate().toLocaleDateString("pt-BR");
+  } catch {
+    return "—";
+  }
+}
+
+// ── Ação rápida: efetivar (pagar/receber) com a data de hoje ──
+const efetivando = ref<string | null>(null);
+async function efetivar(t: Transaction) {
+  if (!t.id || t.realizado) return;
+  efetivando.value = t.id;
+  try {
+    await updateTransaction(t.id, {
+      realizado: true,
+      // Sem valor efetivo informado: assume o previsto.
+      valor: prev(t),
+      dataEfetivacao: new Date(),
+    });
+    toast.success(t.tipo === "despesa" ? "Despesa paga." : "Receita recebida.");
+  } catch (e) {
+    toast.error("Não foi possível efetivar.");
+    console.error(e);
+  } finally {
+    efetivando.value = null;
+  }
+}
+
 // ── Criar / editar ──
 const modalOpen = ref(false);
 const editingId = ref<string | null>(null);
@@ -184,12 +256,22 @@ const form = reactive({
   valorPrevisto: 0,
   valorEfetivo: 0,
   dataISO: hojeISO(),
+  dataEfetivacaoISO: hojeISO(),
   accountId: "" as string,
   categoryId: "" as string,
   previsto: true,
   realizado: false,
   fixa: false,
+  essencial: false,
 });
+
+// Ao marcar "já paguei/recebi", sugere a data de efetivação de hoje.
+watch(
+  () => form.realizado,
+  (r) => {
+    if (r && !form.dataEfetivacaoISO) form.dataEfetivacaoISO = hojeISO();
+  },
+);
 
 // Opções de categoria conforme o tipo selecionado.
 const categoriaOptions = computed<SelectOption[]>(() => [
@@ -209,13 +291,16 @@ const tipoFormOptions: SelectOption[] = [
   { label: "Receita", value: "receita" },
 ];
 
-// Ao escolher categoria, herda o default de "fixa" (só despesa).
+// Ao escolher categoria, herda os defaults de "fixa" e "essencial" (só despesa).
 watch(
   () => form.categoryId,
   (id) => {
     if (form.tipo !== "despesa") return;
     const cat = categories.value.find((c) => c.id === id);
-    if (cat) form.fixa = cat.fixaPorPadrao;
+    if (cat) {
+      form.fixa = cat.fixaPorPadrao;
+      form.essencial = cat.essencialPorPadrao ?? false;
+    }
   },
 );
 
@@ -227,11 +312,13 @@ function abrirNovo() {
     valorPrevisto: 0,
     valorEfetivo: 0,
     dataISO: hojeISO(),
+    dataEfetivacaoISO: hojeISO(),
     accountId: "",
     categoryId: "",
     previsto: true,
     realizado: false,
     fixa: false,
+    essencial: false,
   });
   modalOpen.value = true;
 }
@@ -244,11 +331,15 @@ function abrirEdicao(t: Transaction) {
     valorPrevisto: t.valorPrevisto ?? t.valor,
     valorEfetivo: t.realizado ? t.valor : 0,
     dataISO: t.data.toDate().toISOString().slice(0, 10),
+    dataEfetivacaoISO: t.dataEfetivacao
+      ? t.dataEfetivacao.toDate().toISOString().slice(0, 10)
+      : hojeISO(),
     accountId: t.accountId ?? "",
     categoryId: t.categoryId ?? "",
     previsto: t.previsto,
     realizado: t.realizado,
     fixa: t.fixa,
+    essencial: t.essencial ?? false,
   });
   modalOpen.value = true;
 }
@@ -284,13 +375,22 @@ async function salvar() {
       accountId: form.accountId || undefined,
       categoryId: form.categoryId || undefined,
       fixa: form.tipo === "despesa" ? form.fixa : false,
+      essencial: form.tipo === "despesa" ? form.essencial : false,
       descricao: form.descricao.trim(),
     };
+    // Data de efetivação: só quando realizado.
+    const dataEfetivacao = form.realizado
+      ? new Date(form.dataEfetivacaoISO + "T12:00:00")
+      : undefined;
     if (editingId.value) {
-      await updateTransaction(editingId.value, payload);
+      // null limpa a efetivação caso o lançamento volte a ser apenas previsto.
+      await updateTransaction(editingId.value, {
+        ...payload,
+        dataEfetivacao: dataEfetivacao ?? null,
+      });
       toast.success("Lançamento atualizado.");
     } else {
-      await createTransaction(payload);
+      await createTransaction({ ...payload, dataEfetivacao });
       toast.success("Lançamento criado.");
     }
     modalOpen.value = false;
@@ -348,67 +448,106 @@ async function remover(t: Transaction) {
         </div>
       </div>
 
-      <!-- Faturas de cartão deste mês (o cartão é mais uma despesa) -->
-      <div v-if="faturasMes.length" class="faturas">
-        <div
-          v-for="f in faturasMes"
-          :key="f.invoiceId"
-          class="fatura-row"
-          @click="router.push({ name: 'card-detail', params: { cardId: f.cardId } })"
-        >
-          <div>
-            <strong>Fatura {{ f.cardNome }}</strong>
-            <OrenBadge variant="warning">a pagar</OrenBadge>
-          </div>
-          <div class="fatura-row__right">
-            <span class="val-neg">−{{ formatBRL(f.valorFinal) }}</span>
-            <span class="prev-hint">vence {{ fmtVenc(f.vencimentoMs) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <p v-if="linhas.length === 0" class="empty">
+      <p v-if="semNada" class="empty">
         Nenhum lançamento neste mês com os filtros atuais.
       </p>
 
-      <OrenTable v-else :columns="columns" :rows="linhas">
-        <template #cell-data="{ row }">{{ fmtData(row.data) }}</template>
-        <template #cell-categoryId="{ value }">{{ nomeCategoria(value as string) }}</template>
-        <template #cell-accountId="{ value }">{{ nomeConta(value as string) }}</template>
-        <template #cell-previsto="{ row }">
-          <div class="status-badges">
-            <OrenBadge v-if="row.previsto && !row.realizado" variant="warning">
-              {{ row.tipo === "despesa" ? "A pagar" : "A receber" }}
-            </OrenBadge>
-            <OrenBadge v-if="row.realizado" variant="success">
-              {{ row.tipo === "despesa" ? "Pago" : "Recebido" }}
-            </OrenBadge>
-          </div>
-        </template>
-        <template #cell-valorPrevisto="{ row }">
-          <span :class="row.tipo === 'receita' ? 'val-pos' : 'val-neg'">
-            {{ row.tipo === "receita" ? "+" : "−" }}{{ formatBRL(prev(row)) }}
+      <!-- Segmentos: Receitas e Despesas (cartões entram como fatura em Despesas) -->
+      <section v-for="seg in segmentos" :key="seg.key" class="segmento">
+        <div class="segmento__head" :class="`segmento__head--${seg.key}`">
+          <h2 class="segmento__title">{{ seg.label }}</h2>
+          <span
+            class="segmento__total"
+            :class="seg.key === 'receita' ? 'val-pos' : 'val-neg'"
+          >
+            {{ seg.key === "receita" ? "+" : "−" }}{{ formatBRL(totalSegmento(seg)) }}
+            <span class="prev-hint">previsto</span>
           </span>
-        </template>
-        <template #cell-valor="{ row }">
-          <template v-if="row.realizado">
-            <strong :class="row.tipo === 'receita' ? 'val-pos' : 'val-neg'">
-              {{ row.tipo === "receita" ? "+" : "−" }}{{ formatBRL(row.valor) }}
-            </strong>
-            <span v-if="desvio(row) !== 0" class="prev-hint">
-              desvio {{ desvio(row) > 0 ? "+" : "−" }}{{ formatBRL(Math.abs(desvio(row))) }}
+        </div>
+
+        <!-- Faturas de cartão deste mês (o cartão é mais uma despesa) -->
+        <div v-if="seg.faturas.length" class="faturas">
+          <div
+            v-for="f in seg.faturas"
+            :key="f.invoiceId"
+            class="fatura-row"
+            @click="router.push({ name: 'card-detail', params: { cardId: f.cardId } })"
+          >
+            <div>
+              <strong>Fatura {{ f.cardNome }}</strong>
+              <OrenBadge v-if="f.status === 'paga'" variant="success">paga</OrenBadge>
+              <OrenBadge v-else variant="warning">a pagar</OrenBadge>
+            </div>
+            <div class="fatura-row__right">
+              <span class="val-neg">−{{ formatBRL(f.valorFinal) }}</span>
+              <span class="prev-hint">
+                {{
+                  f.status === "paga"
+                    ? `paga em ${fmtVenc(f.dataPagamentoMs)}`
+                    : `vence ${fmtVenc(f.vencimentoMs)}`
+                }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <p v-if="!seg.rows.length && !seg.faturas.length" class="empty empty--seg">
+          Nenhum lançamento.
+        </p>
+
+        <OrenTable v-if="seg.rows.length" :columns="columns" :rows="seg.rows">
+          <template #cell-data="{ row }">{{ fmtData(row.data) }}</template>
+          <template #cell-dataEfetivacao="{ row }">
+            <span :class="{ 'prev-hint': !row.dataEfetivacao }">
+              {{ fmtDataOpt(row.dataEfetivacao) }}
             </span>
           </template>
-          <span v-else class="prev-hint">— a efetivar</span>
-        </template>
-        <template #cell-criadoPor="{ value }">{{ nomeAutor(value as string) }}</template>
-        <template #cell-id="{ row }">
-          <div class="row-actions">
-            <OrenButton size="sm" variant="ghost" @click="abrirEdicao(row)">Editar</OrenButton>
-            <OrenButton size="sm" variant="danger" @click="remover(row)">Excluir</OrenButton>
-          </div>
-        </template>
-      </OrenTable>
+          <template #cell-categoryId="{ value }">{{ nomeCategoria(value as string) }}</template>
+          <template #cell-accountId="{ value }">{{ nomeConta(value as string) }}</template>
+          <template #cell-previsto="{ row }">
+            <div class="status-badges">
+              <OrenBadge v-if="row.previsto && !row.realizado" variant="warning">
+                {{ row.tipo === "despesa" ? "A pagar" : "A receber" }}
+              </OrenBadge>
+              <OrenBadge v-if="row.realizado" variant="success">
+                {{ row.tipo === "despesa" ? "Pago" : "Recebido" }}
+              </OrenBadge>
+            </div>
+          </template>
+          <template #cell-valorPrevisto="{ row }">
+            <span :class="row.tipo === 'receita' ? 'val-pos' : 'val-neg'">
+              {{ row.tipo === "receita" ? "+" : "−" }}{{ formatBRL(prev(row)) }}
+            </span>
+          </template>
+          <template #cell-valor="{ row }">
+            <template v-if="row.realizado">
+              <strong :class="row.tipo === 'receita' ? 'val-pos' : 'val-neg'">
+                {{ row.tipo === "receita" ? "+" : "−" }}{{ formatBRL(row.valor) }}
+              </strong>
+              <span v-if="desvio(row) !== 0" class="prev-hint">
+                desvio {{ desvio(row) > 0 ? "+" : "−" }}{{ formatBRL(Math.abs(desvio(row))) }}
+              </span>
+            </template>
+            <span v-else class="prev-hint">— a efetivar</span>
+          </template>
+          <template #cell-criadoPor="{ value }">{{ nomeAutor(value as string) }}</template>
+          <template #cell-id="{ row }">
+            <div class="row-actions">
+              <OrenButton
+                v-if="!row.realizado"
+                size="sm"
+                variant="primary"
+                :loading="efetivando === row.id"
+                @click="efetivar(row)"
+              >
+                {{ row.tipo === "despesa" ? "Pagar" : "Receber" }}
+              </OrenButton>
+              <OrenButton size="sm" variant="ghost" @click="abrirEdicao(row)">Editar</OrenButton>
+              <OrenButton size="sm" variant="danger" @click="remover(row)">Excluir</OrenButton>
+            </div>
+          </template>
+        </OrenTable>
+      </section>
     </div>
 
     <!-- Modal de lançamento -->
@@ -429,7 +568,10 @@ async function remover(t: Transaction) {
             {{ form.tipo === "despesa" ? "Já paguei" : "Já recebi" }}
           </OrenToggle>
           <OrenToggle v-if="form.tipo === 'despesa'" v-model="form.fixa">
-            Despesa fixa (repete nos próximos meses)
+            Fixa (repete nos próximos meses)
+          </OrenToggle>
+          <OrenToggle v-if="form.tipo === 'despesa'" v-model="form.essencial">
+            Essencial (entra no % da receita)
           </OrenToggle>
         </div>
 
@@ -442,16 +584,16 @@ async function remover(t: Transaction) {
         </template>
 
         <div class="field">
-          <label>
-            {{
-              form.realizado
-                ? form.tipo === "despesa"
-                  ? "Data do pagamento"
-                  : "Data do recebimento"
-                : "Data prevista"
-            }}
-          </label>
+          <label>Data de vencimento</label>
           <input v-model="form.dataISO" type="date" class="date-input" />
+        </div>
+
+        <!-- Data de efetivação: só quando pago/recebido -->
+        <div v-if="form.realizado" class="field">
+          <label>
+            {{ form.tipo === "despesa" ? "Data do pagamento" : "Data do recebimento" }}
+          </label>
+          <input v-model="form.dataEfetivacaoISO" type="date" class="date-input" />
         </div>
       </div>
       <template #footer="{ close }">
@@ -479,9 +621,12 @@ async function remover(t: Transaction) {
 .month-label {
   font-size: 16px;
   font-weight: 500;
-  text-transform: capitalize;
   min-width: 160px;
   text-align: center;
+}
+/* Capitaliza só a primeira letra ("junho de 2026" -> "Junho de 2026"). */
+.month-label::first-letter {
+  text-transform: uppercase;
 }
 .filters {
   display: flex;
@@ -492,6 +637,40 @@ async function remover(t: Transaction) {
 .empty {
   color: var(--text-muted);
   font-size: 14px;
+}
+.empty--seg {
+  margin: 0 0 4px;
+}
+.segmento {
+  margin-bottom: 28px;
+}
+.segmento__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--border-default);
+}
+.segmento__head--receita {
+  border-bottom-color: var(--action-primary, #1f7a4d);
+}
+.segmento__head--despesa {
+  border-bottom-color: #b42318;
+}
+.segmento__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.segmento__total {
+  font-size: 15px;
+  font-weight: 600;
+  text-align: right;
+}
+.segmento__total .prev-hint {
+  font-weight: 400;
 }
 .faturas {
   display: flex;

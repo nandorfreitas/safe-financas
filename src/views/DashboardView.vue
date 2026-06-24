@@ -19,8 +19,8 @@ const {
   aPagar,
   recebidoMes,
   pagoMes,
-  despesasFixas,
-  percentFixas,
+  despesasEssenciais,
+  percentEssenciais,
   totalInvestimentos,
 } = useBudget(competencia);
 
@@ -69,9 +69,9 @@ function fmtVenc(ms: number) {
         <OrenStatCard label="Recebido no mês" :value="formatBRL(recebidoMes)" />
         <OrenStatCard label="Gasto no mês" :value="formatBRL(pagoMes)" />
         <OrenStatCard
-          label="Despesas fixas"
-          :value="formatBRL(despesasFixas)"
-          :delta-label="`${Math.round(percentFixas)}% da receita prevista`"
+          label="Despesas essenciais"
+          :value="formatBRL(despesasEssenciais)"
+          :delta-label="`${Math.round(percentEssenciais)}% da receita prevista`"
         />
         <OrenStatCard
           label="Investimentos"

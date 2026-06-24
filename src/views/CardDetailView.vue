@@ -49,6 +49,9 @@ const invoice = computed(
   () => invoices.value.find((i) => i.competencia === competencia.value) ?? null,
 );
 
+// Fatura paga é imutável: não aceita novas compras (reabra para lançar).
+const faturaPaga = computed(() => invoice.value?.status === "paga");
+
 const comprasDoMes = computed(() =>
   [...purchases.value]
     .filter((t) => t.competencia === competencia.value)
@@ -127,6 +130,10 @@ const categoriaOptions = computed<SelectOption[]>(() => [
 ]);
 
 function abrirCompra() {
+  if (faturaPaga.value) {
+    toast.error("Fatura paga — reabra para lançar novas compras.");
+    return;
+  }
   Object.assign(compra, {
     descricao: "",
     valorTotal: 0,
@@ -139,6 +146,10 @@ function abrirCompra() {
 
 async function salvarCompra() {
   if (!card.value) return;
+  if (faturaPaga.value) {
+    toast.error("Fatura paga — reabra para lançar novas compras.");
+    return;
+  }
   if (!compra.descricao.trim()) {
     toast.error("Informe uma descrição.");
     return;
@@ -325,7 +336,15 @@ async function desfazerPagamento() {
       <!-- Compras -->
       <div class="section-head">
         <h3>Compras desta competência</h3>
-        <OrenButton variant="primary" size="sm" @click="abrirCompra">Nova compra</OrenButton>
+        <OrenButton
+          variant="primary"
+          size="sm"
+          :disabled="faturaPaga"
+          :title="faturaPaga ? 'Fatura paga — reabra para lançar novas compras.' : ''"
+          @click="abrirCompra"
+        >
+          Nova compra
+        </OrenButton>
       </div>
 
       <p v-if="comprasDoMes.length === 0" class="empty">

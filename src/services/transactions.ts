@@ -29,11 +29,15 @@ export interface TransactionInput {
   realizado: boolean;
   valor: number;
   valorPrevisto?: number;
+  /** Vencimento / data prevista (define a competência). */
   data: Date;
+  /** Data de pagamento/recebimento. Só quando realizado. */
+  dataEfetivacao?: Date;
   accountId?: string;
   cardId?: string;
   categoryId?: string;
   fixa: boolean;
+  essencial?: boolean;
   competencia?: string;
   invoiceId?: string;
   descricao: string;
@@ -78,10 +82,14 @@ export async function createTransaction(input: TransactionInput): Promise<string
     valor: input.valor,
     valorPrevisto: input.valorPrevisto,
     data: Timestamp.fromDate(input.data),
+    dataEfetivacao: input.dataEfetivacao
+      ? Timestamp.fromDate(input.dataEfetivacao)
+      : undefined,
     accountId: input.accountId,
     cardId: input.cardId,
     categoryId: input.categoryId,
     fixa: input.fixa,
+    essencial: input.essencial,
     competencia: input.competencia,
     invoiceId: input.invoiceId,
     descricao: input.descricao,
@@ -96,12 +104,19 @@ export async function createTransaction(input: TransactionInput): Promise<string
 
 export async function updateTransaction(
   id: string,
-  patch: Partial<Omit<TransactionInput, "data">> & { data?: Date },
+  patch: Partial<Omit<TransactionInput, "data" | "dataEfetivacao">> & {
+    data?: Date;
+    /** Date para definir; null para limpar (ex.: desfez a efetivação). */
+    dataEfetivacao?: Date | null;
+  },
 ): Promise<void> {
   const { wsId } = ctx();
-  const { data, ...rest } = patch;
+  const { data, dataEfetivacao, ...rest } = patch;
   const out: Record<string, unknown> = { ...rest };
   if (data) out.data = Timestamp.fromDate(data);
+  if (dataEfetivacao !== undefined) {
+    out.dataEfetivacao = dataEfetivacao ? Timestamp.fromDate(dataEfetivacao) : null;
+  }
   await updateDoc(transactionRef(wsId, id), clean(out));
 }
 

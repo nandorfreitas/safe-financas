@@ -22,7 +22,7 @@ import {
 import { intervaloCompetencia } from "@/lib/competencia";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useAuthStore } from "@/stores/auth";
-import type { Competencia } from "@/types/models";
+import type { Competencia, StatusFatura } from "@/types/models";
 
 function useCtxRefs() {
   const { activeId } = storeToRefs(useWorkspaceStore());
@@ -118,6 +118,63 @@ export function useOpenInvoices(): Ref<OpenInvoice[]> {
               competencia: inv.competencia,
               valorFinal: inv.valorFinal,
               vencimentoMs: inv.vencimento?.toMillis?.() ?? 0,
+            });
+          }
+        }),
+      );
+      all.sort((a, b) => a.vencimentoMs - b.vencimentoMs);
+      result.value = all;
+    },
+    { immediate: true, deep: true },
+  );
+
+  return result;
+}
+
+export interface MonthInvoice extends OpenInvoice {
+  status: StatusFatura;
+  /** Quando foi paga (0 se ainda em aberto). */
+  dataPagamentoMs: number;
+}
+
+/**
+ * Faturas (abertas E pagas) de uma competência, de todos os cartões visíveis.
+ * Permite exibir o cartão como despesa do mês mesmo depois de pago e contar o
+ * pagamento como "gasto no mês". Leitura pontual (getDocs), recarrega ao mudar
+ * a competência ou a lista de cartões.
+ */
+export function useInvoicesMonth(
+  competencia: MaybeRefOrGetter<Competencia>,
+): Ref<MonthInvoice[]> {
+  const { wsId } = useCtxRefs();
+  const cards = useCards();
+  const result = ref<MonthInvoice[]>([]);
+
+  watch(
+    [cards, wsId, () => toValue(competencia)],
+    async ([cardList, ws, comp]) => {
+      if (!ws || !comp) {
+        result.value = [];
+        return;
+      }
+      const ativos = cardList.filter((c) => !c.arquivado && c.id);
+      const all: MonthInvoice[] = [];
+      await Promise.all(
+        ativos.map(async (c) => {
+          const snap = await getDocs(
+            query(invoicesRef(ws, c.id as string), where("competencia", "==", comp)),
+          );
+          for (const d of snap.docs) {
+            const inv = d.data();
+            all.push({
+              cardId: c.id as string,
+              cardNome: c.nome,
+              invoiceId: d.id,
+              competencia: inv.competencia,
+              valorFinal: inv.valorFinal,
+              vencimentoMs: inv.vencimento?.toMillis?.() ?? 0,
+              status: inv.status,
+              dataPagamentoMs: inv.dataPagamento?.toMillis?.() ?? 0,
             });
           }
         }),

@@ -87,7 +87,10 @@ export interface Category {
   nome: string;
   tipo: TipoCategoria;
   cor: string;
+  /** Default: lançamentos desta categoria repetem nos próximos meses. */
   fixaPorPadrao: boolean;
+  /** Default: despesa essencial (mínimo para viver) — entra no % da receita. */
+  essencialPorPadrao: boolean;
   arquivada: boolean;
 }
 
@@ -102,14 +105,19 @@ export interface Transaction {
   valor: number;
   /** Centavos. Quanto se esperava (desvio item a item). Opcional. */
   valorPrevisto?: number;
+  /** Data de vencimento / prevista. Define a competência (mês) do lançamento. */
   data: Timestamp;
+  /** Data em que foi pago/recebido. Só quando realizado. */
+  dataEfetivacao?: Timestamp;
   /** Conta de origem (despesa/receita comum). */
   accountId?: string;
   /** Se for compra de cartão. */
   cardId?: string;
   categoryId?: string;
-  /** Só despesa; default herdado da categoria. */
+  /** Recorrente: repete nos próximos meses (o valor pode variar). Só despesa. */
   fixa: boolean;
+  /** Essencial: mínimo para viver — entra no % da receita. Só despesa. */
+  essencial?: boolean;
   /** Só compra de cartão — define a fatura. */
   competencia?: Competencia;
   invoiceId?: string;

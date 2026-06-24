@@ -12,14 +12,14 @@
  *
  * Tudo em centavos. Investimentos ficam de fora (patrimônio).
  */
-import { computed, type MaybeRefOrGetter, toValue } from "vue";
+import { computed, type MaybeRefOrGetter } from "vue";
 import type { Competencia } from "@/types/models";
-import { useAccounts, useTransactionsMonth, useOpenInvoices } from "./useData";
+import { useAccounts, useTransactionsMonth, useInvoicesMonth } from "./useData";
 
 export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
   const accounts = useAccounts();
   const txs = useTransactionsMonth(competencia);
-  const openInvoices = useOpenInvoices();
+  const faturas = useInvoicesMonth(competencia);
 
   const saldoContas = computed(() =>
     accounts.value
@@ -41,13 +41,19 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
   const sumP = (pred: (t: Tx) => boolean, val: (t: Tx) => number) =>
     cashTx.value.filter(pred).reduce((s, t) => s + val(t), 0);
 
-  // Faturas de cartão EM ABERTO desta competência = "mais uma despesa a pagar".
-  const comp = computed(() => toValue(competencia));
+  // Faturas de cartão desta competência (já vêm filtradas pelo mês).
+  // Abertas = "mais uma despesa a pagar"; pagas = gasto já efetivado no mês.
   const faturasAbertas = computed(() =>
-    openInvoices.value
-      .filter((i) => i.competencia === comp.value)
+    faturas.value
+      .filter((i) => i.status === "aberta")
       .reduce((s, i) => s + i.valorFinal, 0),
   );
+  const faturasPagas = computed(() =>
+    faturas.value
+      .filter((i) => i.status === "paga")
+      .reduce((s, i) => s + i.valorFinal, 0),
+  );
+  const faturasTotal = computed(() => faturasAbertas.value + faturasPagas.value);
 
   // ── Pendentes (previsto e ainda não realizado) ──
   const aReceber = computed(() =>
@@ -67,27 +73,34 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
   const recebidoMes = computed(() =>
     sumP((t) => t.tipo === "receita" && t.realizado, valEf),
   );
-  const pagoMes = computed(() => sumP((t) => t.tipo === "despesa" && t.realizado, valEf));
+  // Gasto no mês = despesas em caixa já pagas + faturas de cartão pagas.
+  const pagoMes = computed(
+    () => sumP((t) => t.tipo === "despesa" && t.realizado, valEf) + faturasPagas.value,
+  );
 
   // ── Comparação plano × real (fluxos do mês inteiro, para o fechamento) ──
   const receitaPrevista = computed(() =>
     sumP((t) => t.tipo === "receita" && t.previsto, valPrev),
   );
-  const despesaPrevista = computed(() =>
-    sumP((t) => t.tipo === "despesa" && t.previsto, valPrev),
+  // A fatura é uma despesa esperada do mês (paga ou não); entra no previsto
+  // para o plano × real ficar coerente com o gasto realizado.
+  const despesaPrevista = computed(
+    () => sumP((t) => t.tipo === "despesa" && t.previsto, valPrev) + faturasTotal.value,
   );
   const previstoFlows = computed(() => receitaPrevista.value - despesaPrevista.value);
   const realizadoFlows = computed(() => recebidoMes.value - pagoMes.value);
   const divergenciaFlows = computed(() => realizadoFlows.value - previstoFlows.value);
 
-  // ── Despesas fixas previstas (sobre a receita prevista) ──
-  const despesasFixas = computed(() =>
-    sumP((t) => t.tipo === "despesa" && t.fixa && t.previsto, valPrev),
+  // ── Despesas essenciais previstas (mínimo para viver) sobre a receita ──
+  // "Essencial" é independente de "fixa" (recorrente): uma despesa variável
+  // como mercado pode ser essencial sem ser fixa.
+  const despesasEssenciais = computed(() =>
+    sumP((t) => t.tipo === "despesa" && t.essencial && t.previsto, valPrev),
   );
-  const percentFixas = computed(() =>
+  const percentEssenciais = computed(() =>
     receitaPrevista.value === 0
       ? 0
-      : (despesasFixas.value / receitaPrevista.value) * 100,
+      : (despesasEssenciais.value / receitaPrevista.value) * 100,
   );
 
   return {
@@ -100,6 +113,8 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
     aPagar,
     aPagarLancamentos,
     faturasAbertas,
+    faturasPagas,
+    faturasTotal,
     projecaoSaldoFinal,
     recebidoMes,
     pagoMes,
@@ -108,7 +123,7 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
     previstoFlows,
     realizadoFlows,
     divergenciaFlows,
-    despesasFixas,
-    percentFixas,
+    despesasEssenciais,
+    percentEssenciais,
   };
 }

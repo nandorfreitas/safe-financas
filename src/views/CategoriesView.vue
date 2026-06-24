@@ -34,6 +34,7 @@ const columns: Column<Category>[] = [
   { key: "tipo", label: "Tipo" },
   { key: "cor", label: "Cor" },
   { key: "fixaPorPadrao", label: "Fixa por padrão" },
+  { key: "essencialPorPadrao", label: "Essencial por padrão" },
   { key: "id", label: "" },
 ];
 
@@ -50,11 +51,18 @@ const form = reactive({
   tipo: "despesa" as TipoCategoria,
   cor: "#1f7a4d",
   fixaPorPadrao: false,
+  essencialPorPadrao: false,
 });
 
 function abrirNovo() {
   editingId.value = null;
-  Object.assign(form, { nome: "", tipo: "despesa", cor: "#1f7a4d", fixaPorPadrao: false });
+  Object.assign(form, {
+    nome: "",
+    tipo: "despesa",
+    cor: "#1f7a4d",
+    fixaPorPadrao: false,
+    essencialPorPadrao: false,
+  });
   modalOpen.value = true;
 }
 
@@ -65,6 +73,7 @@ function abrirEdicao(c: Category) {
     tipo: c.tipo,
     cor: c.cor,
     fixaPorPadrao: c.fixaPorPadrao,
+    essencialPorPadrao: c.essencialPorPadrao ?? false,
   });
   modalOpen.value = true;
 }
@@ -129,6 +138,9 @@ async function remover(c: Category) {
         <template #cell-fixaPorPadrao="{ value }">
           {{ value ? "Sim" : "—" }}
         </template>
+        <template #cell-essencialPorPadrao="{ value }">
+          {{ value ? "Sim" : "—" }}
+        </template>
         <template #cell-id="{ row }">
           <div class="row-actions">
             <OrenButton size="sm" variant="ghost" @click="abrirEdicao(row)">Editar</OrenButton>
@@ -146,7 +158,14 @@ async function remover(c: Category) {
           <label>Cor</label>
           <input v-model="form.cor" type="color" class="color-input" />
         </div>
-        <OrenToggle v-model="form.fixaPorPadrao">Despesa fixa por padrão</OrenToggle>
+        <template v-if="form.tipo === 'despesa'">
+          <OrenToggle v-model="form.fixaPorPadrao">
+            Fixa por padrão (repete nos próximos meses)
+          </OrenToggle>
+          <OrenToggle v-model="form.essencialPorPadrao">
+            Essencial por padrão (entra no % da receita)
+          </OrenToggle>
+        </template>
       </div>
       <template #footer="{ close }">
         <OrenButton variant="ghost" @click="close">Cancelar</OrenButton>
