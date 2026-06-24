@@ -35,20 +35,19 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
       .filter(pred)
       .reduce((s, t) => s + t.valor, 0);
 
-  // Previsto (ainda não realizado).
-  const receitasPrevNaoReal = computed(() =>
-    sum((t) => t.tipo === "receita" && t.previsto && !t.realizado),
+  // Mesma fórmula, conjuntos diferentes: o previsto enxerga TODOS os lançamentos
+  // previstos (mesmo já realizados); o realizado, todos os realizados.
+  const receitasPrev = computed(() =>
+    sum((t) => t.tipo === "receita" && t.previsto),
   );
-  const despesasPrevNaoReal = computed(() =>
-    sum((t) => t.tipo === "despesa" && t.previsto && !t.realizado),
+  const despesasPrev = computed(() =>
+    sum((t) => t.tipo === "despesa" && t.previsto),
   );
-
-  // Realizado.
   const receitasReal = computed(() => sum((t) => t.tipo === "receita" && t.realizado));
   const despesasReal = computed(() => sum((t) => t.tipo === "despesa" && t.realizado));
 
   const previstoTotal = computed(
-    () => saldoContas.value + receitasPrevNaoReal.value - despesasPrevNaoReal.value,
+    () => saldoContas.value + receitasPrev.value - despesasPrev.value,
   );
   const realizadoTotal = computed(
     () => saldoContas.value + receitasReal.value - despesasReal.value,
@@ -57,13 +56,11 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
   const divergencia = computed(() => realizadoTotal.value - previstoTotal.value);
 
   // Receita prevista do mês (denominador para o % de fixas).
-  const receitaPrevista = computed(() =>
-    sum((t) => t.tipo === "receita" && (t.previsto || t.realizado)),
-  );
+  const receitaPrevista = computed(() => receitasPrev.value);
 
-  // Despesas fixas do mês (planejadas ou realizadas).
+  // Despesas fixas previstas do mês (sobre a receita prevista).
   const despesasFixas = computed(() =>
-    sum((t) => t.tipo === "despesa" && t.fixa && (t.previsto || t.realizado)),
+    sum((t) => t.tipo === "despesa" && t.fixa && t.previsto),
   );
 
   const percentFixas = computed(() =>
