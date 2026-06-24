@@ -4,8 +4,16 @@
       "collectionGroup": "transactions",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "data", "order": "ASCENDING" }
+        { "fieldPath": "_visibilidade", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "_donoUid", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "DESCENDING" }
       ]
     }
   ],

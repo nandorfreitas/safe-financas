@@ -1,47 +1,79 @@
 <script setup lang="ts">
-import { OrenPage, OrenStatCard, OrenCard, OrenAlert } from "@oren/design-system";
+import { computed, ref } from "vue";
+import { OrenPage, OrenStatCard, OrenCard } from "@oren/design-system";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { useBudget } from "@/composables/useBudget";
+import { formatBRL } from "@/lib/money";
+import { competenciaDe, competenciaLabel } from "@/lib/competencia";
 
 const wsStore = useWorkspaceStore();
+const competencia = ref(competenciaDe());
 
-// Valores ainda zerados — a camada de cálculo (orçamento previsto × realizado)
-// entra no próximo marco, ligada às coleções de contas/transações.
+const {
+  previstoTotal,
+  realizadoTotal,
+  divergencia,
+  despesasFixas,
+  percentFixas,
+  totalInvestimentos,
+} = useBudget(competencia);
+
+// Divergência como % do previsto (para o chip do card de realizado).
+const divergenciaPct = computed(() => {
+  if (previstoTotal.value === 0) return undefined;
+  return Math.round((divergencia.value / Math.abs(previstoTotal.value)) * 100);
+});
 </script>
 
 <template>
   <OrenPage
     subtitle="Visão geral"
     title="Dashboard"
-    :description="wsStore.active?.name"
+    :description="`${wsStore.active?.name ?? ''} · ${competenciaLabel(competencia)}`"
   >
     <div class="page-pad">
-      <OrenAlert feedback="info">
-        Fundação pronta. Os números abaixo são placeholders — a camada de cálculo
-        (previsto × realizado, fixas, investimentos) será ligada às coleções no
-        próximo passo.
-      </OrenAlert>
-
-      <div class="cards-grid" style="margin-top: 20px">
-        <OrenStatCard label="Orçamento previsto" value="R$ 0,00" tone="capital" />
-        <OrenStatCard label="Orçamento realizado" value="R$ 0,00" tone="payments" />
+      <div class="cards-grid">
+        <OrenStatCard
+          label="Orçamento previsto"
+          :value="formatBRL(previstoTotal)"
+          tone="capital"
+          source="saldos + previstos não realizados"
+        />
+        <OrenStatCard
+          label="Orçamento realizado"
+          :value="formatBRL(realizadoTotal)"
+          tone="payments"
+          :delta="divergenciaPct"
+          delta-label="vs. previsto"
+        />
         <OrenStatCard
           label="Despesas fixas"
-          value="R$ 0,00"
-          delta-label="0% da receita do mês"
+          :value="formatBRL(despesasFixas)"
+          :delta-label="`${Math.round(percentFixas)}% da receita do mês`"
         />
         <OrenStatCard
           label="Investimentos"
-          value="R$ 0,00"
+          :value="formatBRL(totalInvestimentos)"
           tone="governance"
+          source="patrimônio, fora do caixa"
         />
       </div>
 
       <OrenCard style="margin-top: 20px">
-        <h3 style="margin-top: 0">Faturas em aberto</h3>
-        <p style="color: var(--text-muted); font-size: 14px">
-          Nenhuma fatura próxima do vencimento.
+        <template #title>Faturas em aberto</template>
+        <p class="muted">
+          A gestão de cartões e faturas entra no próximo marco. Aqui aparecerão as
+          faturas abertas com vencimento próximo.
         </p>
       </OrenCard>
     </div>
   </OrenPage>
 </template>
+
+<style scoped>
+.muted {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+}
+</style>
