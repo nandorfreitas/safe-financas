@@ -44,6 +44,34 @@ a {
   gap: 16px;
 }
 
+/*
+ * O OrenPage já aplica o padding do cabeçalho (.op__header) e do corpo
+ * (.op__body). O .page-pad é só um contêiner de conteúdo — SEM padding próprio,
+ * para não duplicar (antes ficava ~60px no topo e 80px nas laterais).
+ */
 .page-pad {
-  padding: 28px 40px;
+  padding: 0;
+}
+
+/*
+ * Ajuste responsivo do padding das páginas. Os estilos do OrenPage são scoped
+ * (especificidade maior), então usamos !important para sobrescrever em telas
+ * menores. No desktop fica o padrão do DS (28/40 no header, 32/40 no corpo).
+ */
+@media (max-width: 900px) {
+  .op__header {
+    padding: 22px 24px 18px !important;
+  }
+  .op__body {
+    padding: 24px 24px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .op__header {
+    padding: 16px 16px 14px !important;
+  }
+  .op__body {
+    padding: 18px 16px !important;
+  }
 }
