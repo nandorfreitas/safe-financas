@@ -31,5 +31,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    fs: {
+      // O DS é servido do código-fonte fora da raiz deste projeto; sem isto o
+      // Vite responde 403 ("outside of allow list") ao importá-lo no dev server.
+      allow: [resolve(__dirname), resolve(orenSrc, "..")],
+    },
   },
 });
