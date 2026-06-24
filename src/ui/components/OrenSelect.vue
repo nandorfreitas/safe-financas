@@ -180,6 +180,7 @@ function onUpdate(key: string) {
   white-space: nowrap;
 }
 
+.oren-select__option:hover,
 .oren-select__option[data-highlighted] {
   background: var(--surface-subtle, #e8f3e8);
 }
