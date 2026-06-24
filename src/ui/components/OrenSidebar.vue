@@ -330,6 +330,20 @@ function toggle() {
 .osb__toggle--closed svg {
   transform: rotate(180deg);
 }
+/* No mobile a sidebar é um drawer (controlado pelo AppShell): o botão de
+   recolher/expandir não faz sentido e a largura é sempre a expandida. */
+@media (max-width: 768px) {
+  .osb-wrap,
+  .osb-wrap--closed {
+    width: 264px;
+    min-width: 264px;
+    max-width: 264px;
+  }
+  .osb__toggle {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .osb-wrap,
   .osb__toggle svg,

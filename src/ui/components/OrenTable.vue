@@ -5,7 +5,8 @@ defineProps<{ columns: Column<T>[]; rows: T[] }>();
 </script>
 
 <template>
-  <table class="oren-table">
+  <div class="oren-table-wrap">
+    <table class="oren-table">
     <thead>
       <tr>
         <th v-for="col in columns" :key="col.key">{{ col.label }}</th>
@@ -20,10 +21,16 @@ defineProps<{ columns: Column<T>[]; rows: T[] }>();
         </td>
       </tr>
     </tbody>
-  </table>
+    </table>
+  </div>
 </template>
 
 <style scoped>
+/* Rolagem horizontal em telas estreitas — a página nunca rola na horizontal. */
+.oren-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .oren-table {
   width: 100%;
   border-collapse: collapse;
@@ -53,5 +60,13 @@ defineProps<{ columns: Column<T>[]; rows: T[] }>();
 }
 .oren-table tbody tr:hover {
   background: var(--surface-subtle);
+}
+
+/* No mobile a tabela assume a largura natural e rola dentro do wrapper,
+   em vez de espremer as colunas. */
+@media (max-width: 768px) {
+  .oren-table {
+    min-width: max-content;
+  }
 }
 </style>
