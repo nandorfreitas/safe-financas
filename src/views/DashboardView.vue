@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { OrenPage, OrenStatCard, OrenCard, OrenBadge } from "@oren/design-system";
+import { OrenPage, OrenStatCard, OrenCard, OrenBadge } from "@/ui";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useBudget } from "@/composables/useBudget";
 import { useOpenInvoices } from "@/composables/useData";

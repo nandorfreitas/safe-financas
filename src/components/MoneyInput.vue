@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { OrenInput } from "@oren/design-system";
+import { OrenInput } from "@/ui";
 import { formatCentavos, parseToCentavos } from "@/lib/money";
 
 const props = withDefaults(
@@ -26,9 +26,10 @@ watch(
   },
 );
 
-function onInput(v: string) {
-  texto.value = v;
-  const centavos = parseToCentavos(v);
+function onInput(v: string | number) {
+  const s = String(v);
+  texto.value = s;
+  const centavos = parseToCentavos(s);
   emit("update:modelValue", centavos ?? 0);
 }
 

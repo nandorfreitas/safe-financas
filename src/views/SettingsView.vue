@@ -7,7 +7,7 @@ import {
   OrenInput,
   OrenBadge,
   useToast,
-} from "@oren/design-system";
+} from "@/ui";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useAuthStore } from "@/stores/auth";
 import {

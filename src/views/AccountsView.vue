@@ -9,8 +9,8 @@ import {
   OrenInput,
   OrenToggle,
   useToast,
-} from "@oren/design-system";
-import type { Column } from "@oren/design-system";
+} from "@/ui";
+import type { Column } from "@/ui";
 import MoneyInput from "@/components/MoneyInput.vue";
 import { useAccounts } from "@/composables/useData";
 import {

@@ -10,7 +10,7 @@ import {
   OrenInput,
   OrenToggle,
   useToast,
-} from "@oren/design-system";
+} from "@/ui";
 import MoneyInput from "@/components/MoneyInput.vue";
 import { useCards } from "@/composables/useData";
 import { createCard, updateCard, deleteCard } from "@/services/cards";

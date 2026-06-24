@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { OrenSidebar, OrenSpinner, OrenButton, OrenInput } from "@oren/design-system";
+import { OrenSidebar, OrenSpinner, OrenButton, OrenInput } from "@/ui";
 import { icons } from "@/lib/icons";
 import { useAuthStore } from "@/stores/auth";
 import { useWorkspaceStore } from "@/stores/workspace";

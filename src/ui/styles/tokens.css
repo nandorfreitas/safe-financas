@@ -1,0 +1,67 @@
+/* ============================================================
+   OREN — DESIGN TOKENS
+   Importe uma vez na raiz do app:  import '@oren/design-system/tokens.css'
+   Tema escuro: adicione  data-theme="dark"  em qualquer ancestral.
+   ============================================================ */
+:root {
+  /* Primitivos — marca */
+  --green-darkest: #092d29;
+  --green-itaville: #0e5351;
+  --green-medium: #1a756e;
+  --green-soft: #20b994;
+  --green-light: #affa57;
+  --flash-white: #e8f3e8;
+
+  /* Neutros */
+  --white: #ffffff;
+  --gray-100: #f1f4f2;
+  --gray-200: #e2e7e4;
+  --gray-300: #cdd5d1;
+  --gray-500: #8a938f;
+  --gray-700: #4a524e;
+
+  /* Feedback */
+  --red-error: #d92d20;
+  --amber-warning: #e7a300;
+  --blue-info: #2e74d6;
+
+  /* Semânticos — use SEMPRE estes nos componentes */
+  --text-default: var(--green-darkest);
+  --text-muted: var(--gray-700);
+  --surface-default: var(--white);
+  --surface-subtle: var(--flash-white);
+  --surface-raised: var(--white);
+  --border-default: var(--gray-300);
+  --border-strong: var(--gray-500);
+  --action-primary: var(--green-itaville);
+  --action-primary-hover: var(--green-medium);
+  --action-primary-text: var(--white);
+  --accent: var(--green-light);
+  --accent-text: var(--green-darkest);
+  --focus-ring: var(--green-soft);
+  --feedback-success: var(--green-medium);
+  --feedback-error: var(--red-error);
+  --feedback-warning: var(--amber-warning);
+  --feedback-info: var(--blue-info);
+
+  /* Acentos de pilar (House of Brands) */
+  --oren-payments: #affa57;
+  --oren-capital: #62cc6d;
+  --oren-governance: #1da688;
+
+  /* Forma & tipografia */
+  --radius: 10px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+  --font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+[data-theme="dark"] {
+  --text-default: var(--flash-white);
+  --text-muted: rgba(232, 243, 232, 0.6);
+  --surface-default: var(--green-darkest);
+  --surface-subtle: #0c3a36;
+  --surface-raised: var(--green-itaville);
+  --border-default: rgba(232, 243, 232, 0.18);
+  --border-strong: rgba(232, 243, 232, 0.35);
+}

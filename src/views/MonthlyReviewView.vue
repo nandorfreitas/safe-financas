@@ -10,7 +10,7 @@ import {
   OrenInput,
   OrenBadge,
   useToast,
-} from "@oren/design-system";
+} from "@/ui";
 import MoneyInput from "@/components/MoneyInput.vue";
 import { useBudget } from "@/composables/useBudget";
 import { useReview } from "@/composables/useData";

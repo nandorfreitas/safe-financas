@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { OrenInput, OrenButton, OrenAlert, OrenTabs } from "@oren/design-system";
+import { OrenInput, OrenButton, OrenAlert, OrenTabs } from "@/ui";
 import { useAuthStore } from "@/stores/auth";
 
 const auth = useAuthStore();
