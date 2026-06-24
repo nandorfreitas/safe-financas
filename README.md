@@ -90,9 +90,25 @@ npm run emulators
 
 ## Estado atual
 
-Fundação da Fase 1 pronta e validada (`npm run typecheck` e `npm run build` passam):
-auth, workspace + onboarding, layout com sidebar, login, dashboard shell, rotas de
-todas as 10 telas, Security Rules, e a Cloud Function de convite.
+**Fase 1 (MVP) completa** e validada — `npm run typecheck` e `npm run build` passam,
+e cada marco foi verificado por scripts e2e contra o Firebase real.
 
-**Próximo marco:** camada de dados das entidades (contas, cartões/faturas, categorias,
-transações) e os cálculos de orçamento previsto × realizado.
+- Autenticação (e-mail/senha; Google pendente de OAuth no console)
+- Workspace + onboarding + convite de membros (Cloud Function)
+- Contas e investimentos com saldo manual e visibilidade por entidade
+- Categorias (receita/despesa, cor, `fixaPorPadrao`)
+- Lançamentos com flags previsto/realizado, `valorPrevisto`, despesa fixa
+- Cartões com faturas (competência manual, parcelamento, `valorRegistrado`
+  vs `valorFinal`, pagamento com baixa de saldo — anti-dupla-contagem)
+- Fechamento de mês com alerta de divergência e eventos-anotação
+- Dashboard: previsto × realizado, % de fixas, investimentos, faturas em aberto
+- Security Rules + índices compostos publicados
+
+### Padrão importante de leitura
+
+Listas de entidades com visibilidade (contas, cartões, transações) usam **duas
+queries** (`compartilhada` e `dono == eu`) mescladas no cliente — no Firestore
+"regras não são filtros". Ver `src/composables/useData.ts`.
+
+**Próximos (Fase 2):** fechamento automático de fatura, recorrentes, metas por
+categoria, importação OFX, multi-moeda.

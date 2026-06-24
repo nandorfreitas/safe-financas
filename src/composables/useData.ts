@@ -8,7 +8,7 @@
  * é feita em DUAS queries (uma por disjunto) e mesclada por id no cliente.
  */
 import { computed, ref, watch, type MaybeRefOrGetter, toValue, type Ref } from "vue";
-import { useCollection } from "vuefire";
+import { useCollection, useDocument } from "vuefire";
 import { query, where, orderBy, getDocs, type Query } from "firebase/firestore";
 import { storeToRefs } from "pinia";
 import {
@@ -16,6 +16,7 @@ import {
   cardsRef,
   categoriesRef,
   invoicesRef,
+  reviewRef,
   transactionsRef,
 } from "@/lib/firestore";
 import { intervaloCompetencia } from "@/lib/competencia";
@@ -128,6 +129,17 @@ export function useOpenInvoices(): Ref<OpenInvoice[]> {
   );
 
   return result;
+}
+
+/** Fechamento de uma competência (doc id = "YYYY-MM"). */
+export function useReview(competencia: MaybeRefOrGetter<Competencia>) {
+  const { wsId } = useCtxRefs();
+  return useDocument(
+    computed(() => {
+      const c = toValue(competencia);
+      return wsId.value && c ? reviewRef(wsId.value, c) : null;
+    }),
+  );
 }
 
 /** Faturas de um cartão (subcoleção — herda visibilidade do cartão pai). */
