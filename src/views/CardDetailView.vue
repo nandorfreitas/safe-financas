@@ -1,0 +1,516 @@
+<script setup lang="ts">
+import { computed, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import {
+  OrenPage,
+  OrenButton,
+  OrenCard,
+  OrenBadge,
+  OrenTable,
+  OrenModal,
+  OrenInput,
+  OrenSelect,
+  useToast,
+} from "@oren/design-system";
+import type { Column, SelectOption } from "@oren/design-system";
+import MoneyInput from "@/components/MoneyInput.vue";
+import {
+  useCards,
+  useInvoices,
+  useCardTransactions,
+  useAccounts,
+  useCategories,
+} from "@/composables/useData";
+import { setValorFinal, pagarFatura, reabrirFatura } from "@/services/invoices";
+import { createCardPurchase, deleteCardPurchase } from "@/services/transactions";
+import { formatBRL } from "@/lib/money";
+import {
+  competenciaDe,
+  competenciaLabel,
+  addMeses,
+} from "@/lib/competencia";
+import type { Transaction } from "@/types/models";
+
+const route = useRoute();
+const router = useRouter();
+const toast = useToast();
+
+const cardId = computed(() => route.params.cardId as string);
+const cards = useCards();
+const card = computed(() => cards.value.find((c) => c.id === cardId.value) ?? null);
+
+const competencia = ref(competenciaDe());
+const invoices = useInvoices(cardId);
+const purchases = useCardTransactions(cardId);
+const accounts = useAccounts();
+const categories = useCategories();
+
+const invoice = computed(
+  () => invoices.value.find((i) => i.competencia === competencia.value) ?? null,
+);
+
+// Fatura paga é imutável: não aceita novas compras (reabra para lançar).
+const faturaPaga = computed(() => invoice.value?.status === "paga");
+
+const comprasDoMes = computed(() =>
+  [...purchases.value]
+    .filter((t) => t.competencia === competencia.value)
+    .sort((a, b) => a.data.toMillis() - b.data.toMillis()),
+);
+
+const contas = computed(() =>
+  accounts.value.filter((a) => a.tipo === "conta" && !a.arquivada),
+);
+
+function nomeConta(id?: string) {
+  return id ? accounts.value.find((a) => a.id === id)?.nome ?? "—" : "—";
+}
+function nomeCategoria(id?: string) {
+  return id ? categories.value.find((c) => c.id === id)?.nome ?? "—" : "—";
+}
+
+const columns: Column<Transaction>[] = [
+  { key: "data", label: "Data" },
+  { key: "descricao", label: "Compra" },
+  { key: "categoryId", label: "Categoria" },
+  { key: "parcelaNum", label: "Parcela" },
+  { key: "valor", label: "Valor" },
+  { key: "id", label: "" },
+];
+
+function fmtData(ts: Transaction["data"]) {
+  try {
+    return ts.toDate().toLocaleDateString("pt-BR");
+  } catch {
+    return "—";
+  }
+}
+
+// ── Editar valorFinal ──
+const valorFinalEdit = ref(0);
+watch(
+  invoice,
+  (inv) => {
+    valorFinalEdit.value = inv?.valorFinal ?? 0;
+  },
+  { immediate: true },
+);
+
+const salvandoFinal = ref(false);
+async function salvarValorFinal() {
+  if (!invoice.value?.id) return;
+  salvandoFinal.value = true;
+  try {
+    await setValorFinal(cardId.value, invoice.value.id, valorFinalEdit.value);
+    toast.success("Valor final atualizado.");
+  } catch (e) {
+    toast.error("Não foi possível salvar.");
+    console.error(e);
+  } finally {
+    salvandoFinal.value = false;
+  }
+}
+
+// ── Nova compra ──
+const compraModal = ref(false);
+const salvandoCompra = ref(false);
+const compra = reactive({
+  descricao: "",
+  valorTotal: 0,
+  parcelaTotal: 1,
+  categoryId: "",
+  dataISO: new Date().toISOString().slice(0, 10),
+});
+
+const categoriaOptions = computed<SelectOption[]>(() => [
+  { label: "— sem categoria —", value: "" },
+  ...categories.value
+    .filter((c) => c.tipo === "despesa" && !c.arquivada)
+    .map((c) => ({ label: c.nome, value: c.id ?? "" })),
+]);
+
+function abrirCompra() {
+  if (faturaPaga.value) {
+    toast.error("Fatura paga — reabra para lançar novas compras.");
+    return;
+  }
+  Object.assign(compra, {
+    descricao: "",
+    valorTotal: 0,
+    parcelaTotal: 1,
+    categoryId: "",
+    dataISO: new Date().toISOString().slice(0, 10),
+  });
+  compraModal.value = true;
+}
+
+async function salvarCompra() {
+  if (!card.value) return;
+  if (faturaPaga.value) {
+    toast.error("Fatura paga — reabra para lançar novas compras.");
+    return;
+  }
+  if (!compra.descricao.trim()) {
+    toast.error("Informe uma descrição.");
+    return;
+  }
+  if (compra.valorTotal <= 0) {
+    toast.error("Informe um valor maior que zero.");
+    return;
+  }
+  const n = Number(compra.parcelaTotal);
+  if (!Number.isInteger(n) || n < 1 || n > 99) {
+    toast.error("Número de parcelas inválido.");
+    return;
+  }
+  salvandoCompra.value = true;
+  try {
+    await createCardPurchase({
+      cardId: cardId.value,
+      diaVencimento: card.value.diaVencimento,
+      competenciaInicial: competencia.value,
+      valorTotal: compra.valorTotal,
+      parcelaTotal: n,
+      categoryId: compra.categoryId || undefined,
+      descricao: compra.descricao.trim(),
+      dataCompra: new Date(compra.dataISO + "T12:00:00"),
+    });
+    toast.success(n > 1 ? `Compra em ${n}x lançada.` : "Compra lançada.");
+    compraModal.value = false;
+  } catch (e) {
+    toast.error("Não foi possível lançar a compra.");
+    console.error(e);
+  } finally {
+    salvandoCompra.value = false;
+  }
+}
+
+async function removerCompra(t: Transaction) {
+  if (!confirm("Excluir esta compra/parcela?")) return;
+  try {
+    await deleteCardPurchase(t);
+    toast.success("Compra removida.");
+  } catch (e) {
+    toast.error("Não foi possível remover.");
+    console.error(e);
+  }
+}
+
+// ── Pagamento ──
+const pagamentoModal = ref(false);
+const contaPagadora = ref("");
+const pagando = ref(false);
+
+const contaOptions = computed<SelectOption[]>(() =>
+  contas.value.map((a) => ({
+    label: `${a.nome} — ${formatBRL(a.saldo)}`,
+    value: a.id ?? "",
+  })),
+);
+
+function abrirPagamento() {
+  contaPagadora.value = contas.value[0]?.id ?? "";
+  pagamentoModal.value = true;
+}
+
+async function confirmarPagamento() {
+  if (!invoice.value?.id) return;
+  if (!contaPagadora.value) {
+    toast.error("Selecione a conta pagadora.");
+    return;
+  }
+  pagando.value = true;
+  try {
+    await pagarFatura(
+      cardId.value,
+      invoice.value.id,
+      contaPagadora.value,
+      invoice.value.valorFinal,
+    );
+    toast.success("Fatura paga — saldo da conta atualizado.");
+    pagamentoModal.value = false;
+  } catch (e) {
+    toast.error("Não foi possível pagar a fatura.");
+    console.error(e);
+  } finally {
+    pagando.value = false;
+  }
+}
+
+async function desfazerPagamento() {
+  if (!invoice.value?.id || !invoice.value.pagaPorContaId) return;
+  if (!confirm("Reabrir a fatura e devolver o valor à conta?")) return;
+  try {
+    await reabrirFatura(
+      cardId.value,
+      invoice.value.id,
+      invoice.value.pagaPorContaId,
+      invoice.value.valorFinal,
+    );
+    toast.success("Fatura reaberta.");
+  } catch (e) {
+    toast.error("Não foi possível reabrir.");
+    console.error(e);
+  }
+}
+</script>
+
+<template>
+  <OrenPage
+    subtitle="Patrimônio"
+    :title="card?.nome ?? 'Cartão'"
+    :description="`Vencimento dia ${card?.diaVencimento ?? '—'}`"
+  >
+    <template #actions>
+      <OrenButton variant="ghost" @click="router.push({ name: 'cards' })">
+        ‹ Cartões
+      </OrenButton>
+    </template>
+
+    <div class="page-pad">
+      <!-- Navegação de competência -->
+      <div class="month-nav">
+        <OrenButton size="sm" variant="ghost" @click="competencia = addMeses(competencia, -1)">‹</OrenButton>
+        <span class="month-label">{{ competenciaLabel(competencia) }}</span>
+        <OrenButton size="sm" variant="ghost" @click="competencia = addMeses(competencia, 1)">›</OrenButton>
+      </div>
+
+      <!-- Resumo da fatura -->
+      <OrenCard class="invoice-card">
+        <div class="invoice-grid">
+          <div class="metric">
+            <span class="metric__label">Valor registrado</span>
+            <span class="metric__value">{{ formatBRL(invoice?.valorRegistrado ?? 0) }}</span>
+            <span class="metric__hint">soma automática das compras</span>
+          </div>
+
+          <div class="metric">
+            <span class="metric__label">Valor final (o que se paga)</span>
+            <div class="final-edit">
+              <MoneyInput v-model="valorFinalEdit" :disabled="!invoice || invoice.status === 'paga'" />
+              <OrenButton
+                size="sm"
+                variant="secondary"
+                :loading="salvandoFinal"
+                :disabled="!invoice || invoice.status === 'paga'"
+                @click="salvarValorFinal"
+              >
+                Salvar
+              </OrenButton>
+            </div>
+            <span class="metric__hint">editável — cobre compras não registradas</span>
+          </div>
+
+          <div class="metric">
+            <span class="metric__label">Status</span>
+            <div>
+              <OrenBadge :variant="invoice?.status === 'paga' ? 'success' : 'warning'">
+                {{ invoice?.status === "paga" ? "Paga" : "Aberta" }}
+              </OrenBadge>
+            </div>
+            <span v-if="invoice?.status === 'paga'" class="metric__hint">
+              paga por {{ nomeConta(invoice.pagaPorContaId) }}
+            </span>
+          </div>
+
+          <div class="metric metric--actions">
+            <OrenButton
+              v-if="invoice && invoice.status === 'aberta'"
+              variant="primary"
+              :disabled="invoice.valorFinal <= 0"
+              @click="abrirPagamento"
+            >
+              Pagar fatura
+            </OrenButton>
+            <OrenButton
+              v-else-if="invoice && invoice.status === 'paga'"
+              variant="ghost"
+              @click="desfazerPagamento"
+            >
+              Reabrir fatura
+            </OrenButton>
+          </div>
+        </div>
+      </OrenCard>
+
+      <!-- Compras -->
+      <div class="section-head">
+        <h3>Compras desta competência</h3>
+        <OrenButton
+          variant="primary"
+          size="sm"
+          :disabled="faturaPaga"
+          :title="faturaPaga ? 'Fatura paga — reabra para lançar novas compras.' : ''"
+          @click="abrirCompra"
+        >
+          Nova compra
+        </OrenButton>
+      </div>
+
+      <p v-if="comprasDoMes.length === 0" class="empty">
+        Nenhuma compra lançada nesta competência.
+      </p>
+
+      <OrenTable v-else :columns="columns" :rows="comprasDoMes">
+        <template #cell-data="{ row }">{{ fmtData(row.data) }}</template>
+        <template #cell-categoryId="{ value }">{{ nomeCategoria(value as string) }}</template>
+        <template #cell-parcelaNum="{ row }">
+          <span v-if="row.parcelaTotal && row.parcelaTotal > 1">
+            {{ row.parcelaNum }}/{{ row.parcelaTotal }}
+          </span>
+          <span v-else>—</span>
+        </template>
+        <template #cell-valor="{ row }">{{ formatBRL(row.valor) }}</template>
+        <template #cell-id="{ row }">
+          <div class="row-actions">
+            <OrenButton size="sm" variant="danger" @click="removerCompra(row)">Excluir</OrenButton>
+          </div>
+        </template>
+      </OrenTable>
+    </div>
+
+    <!-- Modal nova compra -->
+    <OrenModal v-model="compraModal" title="Nova compra no cartão">
+      <div class="form">
+        <OrenInput v-model="compra.descricao" label="Descrição" placeholder="Ex.: Notebook" />
+        <MoneyInput v-model="compra.valorTotal" label="Valor total (R$)" />
+        <OrenInput
+          v-model.number="compra.parcelaTotal"
+          label="Parcelas"
+          type="number"
+        />
+        <OrenSelect v-model="compra.categoryId" label="Categoria" :options="categoriaOptions" />
+        <div class="field">
+          <label>Data da compra</label>
+          <input v-model="compra.dataISO" type="date" class="date-input" />
+        </div>
+        <p class="hint">
+          A 1ª parcela cai na competência <b>{{ competenciaLabel(competencia) }}</b>; as
+          demais nas competências seguintes.
+        </p>
+      </div>
+      <template #footer="{ close }">
+        <OrenButton variant="ghost" @click="close">Cancelar</OrenButton>
+        <OrenButton variant="primary" :loading="salvandoCompra" @click="salvarCompra">
+          Lançar
+        </OrenButton>
+      </template>
+    </OrenModal>
+
+    <!-- Modal pagamento -->
+    <OrenModal v-model="pagamentoModal" title="Pagar fatura">
+      <div class="form">
+        <p class="hint">
+          O pagamento <b>não é uma transação</b>: ele baixa o saldo da conta pagadora em
+          {{ formatBRL(invoice?.valorFinal ?? 0) }} e marca a fatura como paga. O gasto já
+          foi contabilizado nas compras.
+        </p>
+        <OrenSelect v-model="contaPagadora" label="Conta pagadora" :options="contaOptions" />
+      </div>
+      <template #footer="{ close }">
+        <OrenButton variant="ghost" @click="close">Cancelar</OrenButton>
+        <OrenButton variant="primary" :loading="pagando" @click="confirmarPagamento">
+          Confirmar pagamento
+        </OrenButton>
+      </template>
+    </OrenModal>
+  </OrenPage>
+</template>
+
+<style scoped>
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.month-label {
+  font-size: 16px;
+  font-weight: 500;
+  text-transform: capitalize;
+  min-width: 160px;
+  text-align: center;
+}
+.invoice-card {
+  margin-bottom: 24px;
+}
+.invoice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.metric__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.metric__value {
+  font-size: 22px;
+  font-weight: 600;
+}
+.metric__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.final-edit {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.metric--actions {
+  justify-content: center;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.section-head h3 {
+  margin: 0;
+  font-weight: 500;
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 340px;
+}
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.date-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 13px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--text-default);
+}
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+</style>
