@@ -31,6 +31,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Permite que o signInWithPopup (Firebase Auth) monitore a janela do popup.
+    // Sem isto, a COOP padrão bloqueia `window.closed` e o popup pode travar.
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    },
     fs: {
       // O DS é servido do código-fonte fora da raiz deste projeto; sem isto o
       // Vite responde 403 ("outside of allow list") ao importá-lo no dev server.
