@@ -1,79 +1,89 @@
 /**
- * Cálculos de orçamento (seção 3 do escopo). Tudo em centavos.
+ * Cálculos de orçamento — MODELO AO VIVO (seção 3 do escopo).
  *
- * Previsto  = Σ saldos das contas + receitas previstas-não-realizadas
- *                                 − despesas previstas-não-realizadas
- * Realizado = Σ saldos das contas + receitas realizadas − despesas realizadas
+ * O saldo das contas é a verdade em tempo real (atualizado à mão: salário entra,
+ * conta paga sai). A projeção responde "quanto vou ter no fim do mês se tudo
+ * correr como planejei", contando apenas o que ainda está PENDENTE:
  *
- * Investimentos ficam FORA do orçamento de caixa (são patrimônio).
+ *   Projeção de saldo final = Σ saldos atuais
+ *                           + receitas previstas ainda NÃO recebidas
+ *                           − despesas previstas ainda NÃO pagas
+ *                           − faturas de cartão em aberto deste mês
+ *
+ * Tudo em centavos. Investimentos ficam de fora (patrimônio).
  */
-import { computed, type MaybeRefOrGetter } from "vue";
+import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import type { Competencia } from "@/types/models";
-import { useAccounts, useTransactionsMonth } from "./useData";
+import { useAccounts, useTransactionsMonth, useOpenInvoices } from "./useData";
 
 export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
   const accounts = useAccounts();
   const txs = useTransactionsMonth(competencia);
+  const openInvoices = useOpenInvoices();
 
   const saldoContas = computed(() =>
     accounts.value
       .filter((a) => a.tipo === "conta" && !a.arquivada)
       .reduce((s, a) => s + a.saldo, 0),
   );
-
   const totalInvestimentos = computed(() =>
     accounts.value
       .filter((a) => a.tipo === "investimento" && !a.arquivada)
       .reduce((s, a) => s + a.saldo, 0),
   );
 
-  // Compras de cartão (cardId) NÃO entram no caixa — só o pagamento da fatura
-  // pesa (via baixa de saldo). Excluímos aqui para evitar dupla contagem.
-  // O lado PREVISTO usa o valor previsto (a previsão); o lado REALIZADO usa o
-  // valor efetivo. Cada um cai no `valorPrevisto`/`valor` com fallback ao outro,
-  // para lançamentos antigos que só têm um dos campos.
   type Tx = (typeof txs.value)[number];
-  const valPrevisto = (t: Tx) => t.valorPrevisto ?? t.valor;
-  const valEfetivo = (t: Tx) => t.valor ?? t.valorPrevisto ?? 0;
+  const valPrev = (t: Tx) => t.valorPrevisto ?? t.valor; // valor previsto
+  const valEf = (t: Tx) => t.valor ?? t.valorPrevisto ?? 0; // valor efetivo
 
-  const sumBy = (pred: (t: Tx) => boolean, val: (t: Tx) => number) =>
-    txs.value
-      .filter((t) => !t.cardId)
-      .filter(pred)
-      .reduce((s, t) => s + val(t), 0);
+  // Compras de cartão entram no orçamento via a FATURA (não a compra avulsa).
+  const cashTx = computed(() => txs.value.filter((t) => !t.cardId));
+  const sumP = (pred: (t: Tx) => boolean, val: (t: Tx) => number) =>
+    cashTx.value.filter(pred).reduce((s, t) => s + val(t), 0);
 
-  // Mesma fórmula, conjuntos diferentes: o previsto enxerga os lançamentos
-  // previstos (pelo valor previsto); o realizado, os realizados (pelo efetivo).
-  const receitasPrev = computed(() =>
-    sumBy((t) => t.tipo === "receita" && t.previsto, valPrevisto),
-  );
-  const despesasPrev = computed(() =>
-    sumBy((t) => t.tipo === "despesa" && t.previsto, valPrevisto),
-  );
-  const receitasReal = computed(() =>
-    sumBy((t) => t.tipo === "receita" && t.realizado, valEfetivo),
-  );
-  const despesasReal = computed(() =>
-    sumBy((t) => t.tipo === "despesa" && t.realizado, valEfetivo),
+  // Faturas de cartão EM ABERTO desta competência = "mais uma despesa a pagar".
+  const comp = computed(() => toValue(competencia));
+  const faturasAbertas = computed(() =>
+    openInvoices.value
+      .filter((i) => i.competencia === comp.value)
+      .reduce((s, i) => s + i.valorFinal, 0),
   );
 
-  const previstoTotal = computed(
-    () => saldoContas.value + receitasPrev.value - despesasPrev.value,
+  // ── Pendentes (previsto e ainda não realizado) ──
+  const aReceber = computed(() =>
+    sumP((t) => t.tipo === "receita" && t.previsto && !t.realizado, valPrev),
   );
-  const realizadoTotal = computed(
-    () => saldoContas.value + receitasReal.value - despesasReal.value,
+  const aPagarLancamentos = computed(() =>
+    sumP((t) => t.tipo === "despesa" && t.previsto && !t.realizado, valPrev),
+  );
+  const aPagar = computed(() => aPagarLancamentos.value + faturasAbertas.value);
+
+  const saldoAtual = saldoContas;
+  const projecaoSaldoFinal = computed(
+    () => saldoContas.value + aReceber.value - aPagar.value,
   );
 
-  const divergencia = computed(() => realizadoTotal.value - previstoTotal.value);
+  // ── Já realizado no mês (fluxos efetivos) ──
+  const recebidoMes = computed(() =>
+    sumP((t) => t.tipo === "receita" && t.realizado, valEf),
+  );
+  const pagoMes = computed(() => sumP((t) => t.tipo === "despesa" && t.realizado, valEf));
 
-  // Receita prevista do mês (denominador para o % de fixas).
-  const receitaPrevista = computed(() => receitasPrev.value);
+  // ── Comparação plano × real (fluxos do mês inteiro, para o fechamento) ──
+  const receitaPrevista = computed(() =>
+    sumP((t) => t.tipo === "receita" && t.previsto, valPrev),
+  );
+  const despesaPrevista = computed(() =>
+    sumP((t) => t.tipo === "despesa" && t.previsto, valPrev),
+  );
+  const previstoFlows = computed(() => receitaPrevista.value - despesaPrevista.value);
+  const realizadoFlows = computed(() => recebidoMes.value - pagoMes.value);
+  const divergenciaFlows = computed(() => realizadoFlows.value - previstoFlows.value);
 
-  // Despesas fixas previstas do mês (sobre a receita prevista).
+  // ── Despesas fixas previstas (sobre a receita prevista) ──
   const despesasFixas = computed(() =>
-    sumBy((t) => t.tipo === "despesa" && t.fixa && t.previsto, valPrevisto),
+    sumP((t) => t.tipo === "despesa" && t.fixa && t.previsto, valPrev),
   );
-
   const percentFixas = computed(() =>
     receitaPrevista.value === 0
       ? 0
@@ -84,11 +94,20 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
     accounts,
     txs,
     saldoContas,
+    saldoAtual,
     totalInvestimentos,
-    previstoTotal,
-    realizadoTotal,
-    divergencia,
+    aReceber,
+    aPagar,
+    aPagarLancamentos,
+    faturasAbertas,
+    projecaoSaldoFinal,
+    recebidoMes,
+    pagoMes,
     receitaPrevista,
+    despesaPrevista,
+    previstoFlows,
+    realizadoFlows,
+    divergenciaFlows,
     despesasFixas,
     percentFixas,
   };

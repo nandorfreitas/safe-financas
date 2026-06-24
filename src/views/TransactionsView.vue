@@ -13,7 +13,13 @@ import {
 } from "@oren/design-system";
 import type { Column, SelectOption } from "@oren/design-system";
 import MoneyInput from "@/components/MoneyInput.vue";
-import { useAccounts, useCategories, useTransactionsMonth } from "@/composables/useData";
+import { useRouter } from "vue-router";
+import {
+  useAccounts,
+  useCategories,
+  useTransactionsMonth,
+  useOpenInvoices,
+} from "@/composables/useData";
 import {
   createTransaction,
   updateTransaction,
@@ -21,16 +27,76 @@ import {
 } from "@/services/transactions";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { formatBRL } from "@/lib/money";
-import { competenciaDe, competenciaLabel, addMeses } from "@/lib/competencia";
+import {
+  competenciaDe,
+  competenciaLabel,
+  addMeses,
+  parseCompetencia,
+} from "@/lib/competencia";
 import type { Transaction, TipoTransacao } from "@/types/models";
 
 const toast = useToast();
+const router = useRouter();
 const wsStore = useWorkspaceStore();
 
 const competencia = ref(competenciaDe());
 const txs = useTransactionsMonth(competencia);
 const accounts = useAccounts();
 const categories = useCategories();
+
+// Mês anterior (para copiar fixas) e faturas do mês (cartão como despesa).
+const prevComp = computed(() => addMeses(competencia.value, -1));
+const txsPrev = useTransactionsMonth(prevComp);
+const openInvoices = useOpenInvoices();
+const faturasMes = computed(() =>
+  openInvoices.value.filter((i) => i.competencia === competencia.value),
+);
+
+// Contas fixas do mês anterior ainda não presentes neste mês (por descrição).
+const fixasParaCopiar = computed(() => {
+  const existentes = new Set(txs.value.map((t) => t.descricao.toLowerCase()));
+  return txsPrev.value.filter(
+    (t) =>
+      t.tipo === "despesa" &&
+      t.fixa &&
+      !existentes.has(t.descricao.toLowerCase()),
+  );
+});
+
+const copiando = ref(false);
+async function copiarFixas() {
+  if (fixasParaCopiar.value.length === 0) return;
+  copiando.value = true;
+  try {
+    const { ano, mes } = parseCompetencia(competencia.value);
+    const ultimoDia = new Date(ano, mes, 0).getDate();
+    for (const t of fixasParaCopiar.value) {
+      const dia = Math.min(t.data.toDate().getDate(), ultimoDia);
+      await createTransaction({
+        tipo: "despesa",
+        previsto: true,
+        realizado: false,
+        valor: t.valorPrevisto ?? t.valor,
+        valorPrevisto: t.valorPrevisto ?? t.valor,
+        data: new Date(ano, mes - 1, dia, 12, 0, 0),
+        accountId: t.accountId,
+        categoryId: t.categoryId,
+        fixa: true,
+        descricao: t.descricao,
+      });
+    }
+    toast.success(`${fixasParaCopiar.value.length} conta(s) fixa(s) copiada(s).`);
+  } catch (e) {
+    toast.error("Não foi possível copiar.");
+    console.error(e);
+  } finally {
+    copiando.value = false;
+  }
+}
+
+function fmtVenc(ms: number) {
+  return ms ? new Date(ms).toLocaleDateString("pt-BR") : "—";
+}
 
 const contas = computed(() =>
   accounts.value.filter((a) => a.tipo === "conta" && !a.arquivada),
@@ -48,13 +114,14 @@ function nomeAutor(uid: string) {
 
 // ── Filtros ──
 const filtroTipo = ref<"" | TipoTransacao>("");
-const filtroStatus = ref<"" | "previsto" | "realizado">("");
+const filtroStatus = ref<"" | "previsto" | "realizado" | "pendente">("");
 
 const linhas = computed(() =>
   txs.value.filter((t) => {
     if (filtroTipo.value && t.tipo !== filtroTipo.value) return false;
     if (filtroStatus.value === "previsto" && !t.previsto) return false;
     if (filtroStatus.value === "realizado" && !t.realizado) return false;
+    if (filtroStatus.value === "pendente" && t.realizado) return false;
     return true;
   }),
 );
@@ -87,8 +154,9 @@ const tipoFiltroOptions: SelectOption[] = [
 ];
 const statusFiltroOptions: SelectOption[] = [
   { label: "Todos", value: "" },
+  { label: "A pagar/receber", value: "pendente" },
   { label: "Previstos", value: "previsto" },
-  { label: "Realizados", value: "realizado" },
+  { label: "Pagos/recebidos", value: "realizado" },
 ];
 
 function fmtData(ts: Transaction["data"]): string {
@@ -266,8 +334,36 @@ async function remover(t: Transaction) {
           </OrenButton>
         </div>
         <div class="filters">
+          <OrenButton
+            v-if="fixasParaCopiar.length"
+            size="sm"
+            variant="secondary"
+            :loading="copiando"
+            @click="copiarFixas"
+          >
+            Copiar {{ fixasParaCopiar.length }} fixa(s) de {{ competenciaLabel(prevComp) }}
+          </OrenButton>
           <OrenSelect v-model="filtroTipo" :options="tipoFiltroOptions" />
           <OrenSelect v-model="filtroStatus" :options="statusFiltroOptions" />
+        </div>
+      </div>
+
+      <!-- Faturas de cartão deste mês (o cartão é mais uma despesa) -->
+      <div v-if="faturasMes.length" class="faturas">
+        <div
+          v-for="f in faturasMes"
+          :key="f.invoiceId"
+          class="fatura-row"
+          @click="router.push({ name: 'card-detail', params: { cardId: f.cardId } })"
+        >
+          <div>
+            <strong>Fatura {{ f.cardNome }}</strong>
+            <OrenBadge variant="warning">a pagar</OrenBadge>
+          </div>
+          <div class="fatura-row__right">
+            <span class="val-neg">−{{ formatBRL(f.valorFinal) }}</span>
+            <span class="prev-hint">vence {{ fmtVenc(f.vencimentoMs) }}</span>
+          </div>
         </div>
       </div>
 
@@ -281,8 +377,12 @@ async function remover(t: Transaction) {
         <template #cell-accountId="{ value }">{{ nomeConta(value as string) }}</template>
         <template #cell-previsto="{ row }">
           <div class="status-badges">
-            <OrenBadge v-if="row.previsto" variant="warning">Previsto</OrenBadge>
-            <OrenBadge v-if="row.realizado" variant="success">Realizado</OrenBadge>
+            <OrenBadge v-if="row.previsto && !row.realizado" variant="warning">
+              {{ row.tipo === "despesa" ? "A pagar" : "A receber" }}
+            </OrenBadge>
+            <OrenBadge v-if="row.realizado" variant="success">
+              {{ row.tipo === "despesa" ? "Pago" : "Recebido" }}
+            </OrenBadge>
           </div>
         </template>
         <template #cell-valorPrevisto="{ row }">
@@ -325,19 +425,32 @@ async function remover(t: Transaction) {
 
         <div class="flags">
           <OrenToggle v-model="form.previsto">Entra no previsto</OrenToggle>
-          <OrenToggle v-model="form.realizado">Já foi efetivado</OrenToggle>
+          <OrenToggle v-model="form.realizado">
+            {{ form.tipo === "despesa" ? "Já paguei" : "Já recebi" }}
+          </OrenToggle>
           <OrenToggle v-if="form.tipo === 'despesa'" v-model="form.fixa">
-            Despesa fixa
+            Despesa fixa (repete nos próximos meses)
           </OrenToggle>
         </div>
 
-        <!-- Efetivo: só ao efetivar -->
+        <!-- Valor efetivo: só ao pagar/receber -->
         <template v-if="form.realizado">
-          <MoneyInput v-model="form.valorEfetivo" label="Valor efetivo (R$)" />
+          <MoneyInput
+            v-model="form.valorEfetivo"
+            :label="form.tipo === 'despesa' ? 'Valor pago (R$)' : 'Valor recebido (R$)'"
+          />
         </template>
 
         <div class="field">
-          <label>{{ form.realizado ? "Data de efetivação" : "Data prevista" }}</label>
+          <label>
+            {{
+              form.realizado
+                ? form.tipo === "despesa"
+                  ? "Data do pagamento"
+                  : "Data do recebimento"
+                : "Data prevista"
+            }}
+          </label>
           <input v-model="form.dataISO" type="date" class="date-input" />
         </div>
       </div>
@@ -373,10 +486,42 @@ async function remover(t: Transaction) {
 .filters {
   display: flex;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 .empty {
   color: var(--text-muted);
   font-size: 14px;
+}
+.faturas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.fatura-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius);
+  background: var(--surface-subtle);
+  cursor: pointer;
+}
+.fatura-row:hover {
+  background: var(--surface-raised);
+}
+.fatura-row > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fatura-row__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .form {
   display: flex;

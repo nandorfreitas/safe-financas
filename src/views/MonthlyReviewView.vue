@@ -24,7 +24,13 @@ const toast = useToast();
 const wsStore = useWorkspaceStore();
 
 const competencia = ref(competenciaDe());
-const { previstoTotal, realizadoTotal, divergencia, receitaPrevista } = useBudget(competencia);
+// Fechamento compara o FLUXO previsto × realizado do mês (não o saldo projetado).
+const {
+  previstoFlows: previstoTotal,
+  realizadoFlows: realizadoTotal,
+  divergenciaFlows: divergencia,
+  receitaPrevista,
+} = useBudget(competencia);
 const review = useReview(competencia);
 
 const limiar = computed(() => wsStore.active?.limiarDivergencia ?? 0.2);
@@ -116,8 +122,18 @@ const fechadoEm = computed(() => {
       </div>
 
       <div class="cards-grid">
-        <OrenStatCard label="Previsto" :value="formatBRL(previstoTotal)" tone="capital" />
-        <OrenStatCard label="Realizado" :value="formatBRL(realizadoTotal)" tone="payments" />
+        <OrenStatCard
+          label="Previsto do mês"
+          :value="formatBRL(previstoTotal)"
+          tone="capital"
+          source="receitas − despesas previstas"
+        />
+        <OrenStatCard
+          label="Realizado do mês"
+          :value="formatBRL(realizadoTotal)"
+          tone="payments"
+          source="recebido − pago"
+        />
         <OrenStatCard
           label="Divergência"
           :value="formatBRL(divergencia)"

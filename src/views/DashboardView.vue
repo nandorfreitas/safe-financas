@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { OrenPage, OrenStatCard, OrenCard, OrenBadge } from "@oren/design-system";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -9,29 +9,26 @@ import { formatBRL } from "@/lib/money";
 import { competenciaDe, competenciaLabel } from "@/lib/competencia";
 
 const router = useRouter();
-const openInvoices = useOpenInvoices();
-
-function fmtVenc(ms: number) {
-  return ms ? new Date(ms).toLocaleDateString("pt-BR") : "—";
-}
-
 const wsStore = useWorkspaceStore();
 const competencia = ref(competenciaDe());
 
 const {
-  previstoTotal,
-  realizadoTotal,
-  divergencia,
+  saldoAtual,
+  projecaoSaldoFinal,
+  aReceber,
+  aPagar,
+  recebidoMes,
+  pagoMes,
   despesasFixas,
   percentFixas,
   totalInvestimentos,
 } = useBudget(competencia);
 
-// Divergência como % do previsto (para o chip do card de realizado).
-const divergenciaPct = computed(() => {
-  if (previstoTotal.value === 0) return undefined;
-  return Math.round((divergencia.value / Math.abs(previstoTotal.value)) * 100);
-});
+const openInvoices = useOpenInvoices();
+
+function fmtVenc(ms: number) {
+  return ms ? new Date(ms).toLocaleDateString("pt-BR") : "—";
+}
 </script>
 
 <template>
@@ -41,24 +38,40 @@ const divergenciaPct = computed(() => {
     :description="`${wsStore.active?.name ?? ''} · ${competenciaLabel(competencia)}`"
   >
     <div class="page-pad">
+      <!-- Os dois números principais -->
       <div class="cards-grid">
         <OrenStatCard
-          label="Saldo final previsto"
-          :value="formatBRL(previstoTotal)"
+          label="Saldo atual"
+          :value="formatBRL(saldoAtual)"
+          tone="payments"
+          source="soma dos saldos das contas"
+        />
+        <OrenStatCard
+          label="Projeção de saldo final"
+          :value="formatBRL(projecaoSaldoFinal)"
           tone="capital"
           source="se tudo ocorrer como previsto"
         />
         <OrenStatCard
-          label="Saldo final realizado"
-          :value="formatBRL(realizadoTotal)"
-          tone="payments"
-          :delta="divergenciaPct"
-          delta-label="vs. previsto"
+          label="A receber"
+          :value="formatBRL(aReceber)"
+          source="recebimentos previstos pendentes"
         />
+        <OrenStatCard
+          label="A pagar"
+          :value="formatBRL(aPagar)"
+          source="contas previstas + faturas em aberto"
+        />
+      </div>
+
+      <!-- Secundários -->
+      <div class="cards-grid" style="margin-top: 16px">
+        <OrenStatCard label="Recebido no mês" :value="formatBRL(recebidoMes)" />
+        <OrenStatCard label="Gasto no mês" :value="formatBRL(pagoMes)" />
         <OrenStatCard
           label="Despesas fixas"
           :value="formatBRL(despesasFixas)"
-          :delta-label="`${Math.round(percentFixas)}% da receita do mês`"
+          :delta-label="`${Math.round(percentFixas)}% da receita prevista`"
         />
         <OrenStatCard
           label="Investimentos"
@@ -70,9 +83,7 @@ const divergenciaPct = computed(() => {
 
       <OrenCard style="margin-top: 20px">
         <template #title>Faturas em aberto</template>
-        <p v-if="openInvoices.length === 0" class="muted">
-          Nenhuma fatura em aberto.
-        </p>
+        <p v-if="openInvoices.length === 0" class="muted">Nenhuma fatura em aberto.</p>
         <ul v-else class="invoices">
           <li
             v-for="inv in openInvoices"
