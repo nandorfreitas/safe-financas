@@ -27,8 +27,13 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
       .reduce((s, a) => s + a.saldo, 0),
   );
 
+  // Compras de cartão (cardId) NÃO entram no caixa — só o pagamento da fatura
+  // pesa (via baixa de saldo). Excluímos aqui para evitar dupla contagem.
   const sum = (pred: (t: (typeof txs.value)[number]) => boolean) =>
-    txs.value.filter(pred).reduce((s, t) => s + t.valor, 0);
+    txs.value
+      .filter((t) => !t.cardId)
+      .filter(pred)
+      .reduce((s, t) => s + t.valor, 0);
 
   // Previsto (ainda não realizado).
   const receitasPrevNaoReal = computed(() =>

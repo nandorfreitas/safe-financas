@@ -74,6 +74,8 @@ export interface Invoice {
   valorRegistrado: number;
   /** O que vale (entra no orçamento). Editável livremente. */
   valorFinal: number;
+  /** Se true, valorFinal foi editado à mão e não acompanha mais valorRegistrado. */
+  valorFinalManual?: boolean;
   /** Conta que quitou a fatura. */
   pagaPorContaId?: string;
   dataPagamento?: Timestamp;
