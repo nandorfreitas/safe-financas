@@ -1,21 +1,28 @@
 <script setup lang="ts">
-defineProps<{ modelValue?: boolean; disabled?: boolean }>();
-defineEmits<{ (e: "update:modelValue", value: boolean): void }>();
+import { computed } from "vue";
+import { SwitchRoot, SwitchThumb } from "reka-ui";
+import { uid } from "../utils";
+
+const props = defineProps<{ modelValue?: boolean; disabled?: boolean }>();
+const emit = defineEmits<{ (e: "update:modelValue", value: boolean): void }>();
+
+const fieldId = uid("toggle");
+const checked = computed(() => props.modelValue ?? false);
 </script>
 
 <template>
-  <label class="oren-toggle" :class="{ 'oren-toggle--disabled': disabled }">
-    <span class="oren-toggle__switch">
-      <input
-        type="checkbox"
-        :checked="modelValue"
-        :disabled="disabled"
-        @change="$emit('update:modelValue', ($event.target as HTMLInputElement).checked)"
-      />
-      <span class="oren-toggle__slider" />
-    </span>
-    <span v-if="$slots.default" class="oren-toggle__label"><slot /></span>
-  </label>
+  <span class="oren-toggle" :class="{ 'oren-toggle--disabled': disabled }">
+    <SwitchRoot
+      :id="fieldId"
+      class="oren-toggle__switch"
+      :model-value="checked"
+      :disabled="disabled"
+      @update:model-value="emit('update:modelValue', $event)"
+    >
+      <SwitchThumb class="oren-toggle__thumb" />
+    </SwitchRoot>
+    <label v-if="$slots.default" :for="fieldId" class="oren-toggle__label"><slot /></label>
+  </span>
 </template>
 
 <style scoped>
@@ -34,47 +41,47 @@ defineEmits<{ (e: "update:modelValue", value: boolean): void }>();
   width: 42px;
   height: 24px;
   flex: none;
-}
-.oren-toggle__switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.oren-toggle__slider {
-  position: absolute;
-  inset: 0;
-  background: var(--gray-300);
+  padding: 0;
+  border: none;
   border-radius: var(--radius-pill);
-  transition: 0.2s;
+  background: var(--gray-300);
   cursor: pointer;
+  transition: background 0.2s;
 }
-.oren-toggle__slider::before {
-  content: "";
-  position: absolute;
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  top: 3px;
-  background: #fff;
-  border-radius: 50%;
-  transition: 0.2s;
-}
-.oren-toggle__switch input:checked + .oren-toggle__slider {
+.oren-toggle__switch[data-state="checked"] {
   background: var(--action-primary);
 }
-.oren-toggle__switch input:checked + .oren-toggle__slider::before {
+.oren-toggle__switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.oren-toggle__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  height: 18px;
+  width: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.oren-toggle__switch[data-state="checked"] .oren-toggle__thumb {
   transform: translateX(18px);
 }
-.oren-toggle__switch input:focus-visible + .oren-toggle__slider {
-  box-shadow: 0 0 0 3px var(--focus-ring);
+.oren-toggle__label {
+  cursor: pointer;
 }
 .oren-toggle--disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+.oren-toggle--disabled .oren-toggle__switch,
+.oren-toggle--disabled .oren-toggle__label {
+  cursor: not-allowed;
+}
 @media (prefers-reduced-motion: reduce) {
-  .oren-toggle__slider,
-  .oren-toggle__slider::before {
+  .oren-toggle__switch,
+  .oren-toggle__thumb {
     transition: none;
   }
 }
