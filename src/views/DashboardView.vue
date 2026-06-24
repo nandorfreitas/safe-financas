@@ -43,13 +43,13 @@ const divergenciaPct = computed(() => {
     <div class="page-pad">
       <div class="cards-grid">
         <OrenStatCard
-          label="Orçamento previsto"
+          label="Saldo final previsto"
           :value="formatBRL(previstoTotal)"
           tone="capital"
-          source="saldos + previstos não realizados"
+          source="se tudo ocorrer como previsto"
         />
         <OrenStatCard
-          label="Orçamento realizado"
+          label="Saldo final realizado"
           :value="formatBRL(realizadoTotal)"
           tone="payments"
           :delta="divergenciaPct"

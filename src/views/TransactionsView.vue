@@ -65,10 +65,20 @@ const columns: Column<Transaction>[] = [
   { key: "categoryId", label: "Categoria" },
   { key: "accountId", label: "Conta" },
   { key: "previsto", label: "Status" },
-  { key: "valor", label: "Valor" },
+  { key: "valorPrevisto", label: "Previsto" },
+  { key: "valor", label: "Efetivo" },
   { key: "criadoPor", label: "Autor" },
   { key: "id", label: "" },
 ];
+
+// Valor previsto (com fallback ao efetivo, para lançamentos antigos).
+function prev(t: Transaction): number {
+  return t.valorPrevisto ?? t.valor;
+}
+// Desvio do efetivo sobre o previsto (só faz sentido se realizado).
+function desvio(t: Transaction): number {
+  return t.valor - prev(t);
+}
 
 const tipoFiltroOptions: SelectOption[] = [
   { label: "Todos os tipos", value: "" },
@@ -101,14 +111,15 @@ function hojeISO() {
 const form = reactive({
   tipo: "despesa" as TipoTransacao,
   descricao: "",
-  valor: 0,
-  usarPrevisto: false,
+  // Fluxo "previsão primeiro": o valor previsto é o principal; o efetivo é
+  // preenchido depois, ao efetivar.
   valorPrevisto: 0,
+  valorEfetivo: 0,
   dataISO: hojeISO(),
   accountId: "" as string,
   categoryId: "" as string,
   previsto: true,
-  realizado: true,
+  realizado: false,
   fixa: false,
 });
 
@@ -145,14 +156,13 @@ function abrirNovo() {
   Object.assign(form, {
     tipo: "despesa",
     descricao: "",
-    valor: 0,
-    usarPrevisto: false,
     valorPrevisto: 0,
+    valorEfetivo: 0,
     dataISO: hojeISO(),
     accountId: "",
     categoryId: "",
     previsto: true,
-    realizado: true,
+    realizado: false,
     fixa: false,
   });
   modalOpen.value = true;
@@ -163,9 +173,8 @@ function abrirEdicao(t: Transaction) {
   Object.assign(form, {
     tipo: t.tipo,
     descricao: t.descricao,
-    valor: t.valor,
-    usarPrevisto: t.valorPrevisto != null,
-    valorPrevisto: t.valorPrevisto ?? 0,
+    valorPrevisto: t.valorPrevisto ?? t.valor,
+    valorEfetivo: t.realizado ? t.valor : 0,
     dataISO: t.data.toDate().toISOString().slice(0, 10),
     accountId: t.accountId ?? "",
     categoryId: t.categoryId ?? "",
@@ -181,12 +190,16 @@ async function salvar() {
     toast.error("Informe uma descrição.");
     return;
   }
-  if (form.valor <= 0) {
-    toast.error("Informe um valor maior que zero.");
+  if (form.valorPrevisto <= 0) {
+    toast.error("Informe o valor previsto.");
+    return;
+  }
+  if (form.realizado && form.valorEfetivo <= 0) {
+    toast.error("Para um lançamento já efetivado, informe o valor efetivo.");
     return;
   }
   if (!form.previsto && !form.realizado) {
-    toast.error("O lançamento precisa ser previsto, realizado, ou ambos.");
+    toast.error("O lançamento precisa ser previsto, efetivado, ou ambos.");
     return;
   }
   saving.value = true;
@@ -195,8 +208,10 @@ async function salvar() {
       tipo: form.tipo,
       previsto: form.previsto,
       realizado: form.realizado,
-      valor: form.valor,
-      valorPrevisto: form.usarPrevisto ? form.valorPrevisto : undefined,
+      // valorPrevisto guarda a previsão; valor guarda o efetivo (ou espelha a
+      // previsão enquanto não efetivado — o lado realizado só soma se realizado).
+      valor: form.realizado ? form.valorEfetivo : form.valorPrevisto,
+      valorPrevisto: form.valorPrevisto,
       data: new Date(form.dataISO + "T12:00:00"),
       accountId: form.accountId || undefined,
       categoryId: form.categoryId || undefined,
@@ -270,13 +285,21 @@ async function remover(t: Transaction) {
             <OrenBadge v-if="row.realizado" variant="success">Realizado</OrenBadge>
           </div>
         </template>
-        <template #cell-valor="{ row }">
-          <strong :class="row.tipo === 'receita' ? 'val-pos' : 'val-neg'">
-            {{ row.tipo === "receita" ? "+" : "−" }}{{ formatBRL(row.valor) }}
-          </strong>
-          <span v-if="row.valorPrevisto != null" class="prev-hint">
-            prev. {{ formatBRL(row.valorPrevisto) }}
+        <template #cell-valorPrevisto="{ row }">
+          <span :class="row.tipo === 'receita' ? 'val-pos' : 'val-neg'">
+            {{ row.tipo === "receita" ? "+" : "−" }}{{ formatBRL(prev(row)) }}
           </span>
+        </template>
+        <template #cell-valor="{ row }">
+          <template v-if="row.realizado">
+            <strong :class="row.tipo === 'receita' ? 'val-pos' : 'val-neg'">
+              {{ row.tipo === "receita" ? "+" : "−" }}{{ formatBRL(row.valor) }}
+            </strong>
+            <span v-if="desvio(row) !== 0" class="prev-hint">
+              desvio {{ desvio(row) > 0 ? "+" : "−" }}{{ formatBRL(Math.abs(desvio(row))) }}
+            </span>
+          </template>
+          <span v-else class="prev-hint">— a efetivar</span>
         </template>
         <template #cell-criadoPor="{ value }">{{ nomeAutor(value as string) }}</template>
         <template #cell-id="{ row }">
@@ -293,29 +316,29 @@ async function remover(t: Transaction) {
       <div class="form">
         <OrenSelect v-model="form.tipo" label="Tipo" :options="tipoFormOptions" />
         <OrenInput v-model="form.descricao" label="Descrição" placeholder="Ex.: Conta de luz" />
-        <MoneyInput v-model="form.valor" label="Valor efetivo (R$)" />
 
-        <OrenToggle v-model="form.usarPrevisto">Registrar valor previsto (desvio)</OrenToggle>
-        <MoneyInput
-          v-if="form.usarPrevisto"
-          v-model="form.valorPrevisto"
-          label="Valor previsto (R$)"
-        />
-
-        <div class="field">
-          <label>Data</label>
-          <input v-model="form.dataISO" type="date" class="date-input" />
-        </div>
+        <!-- Previsão é o principal -->
+        <MoneyInput v-model="form.valorPrevisto" label="Valor previsto (R$)" />
 
         <OrenSelect v-model="form.categoryId" label="Categoria" :options="categoriaOptions" />
         <OrenSelect v-model="form.accountId" label="Conta" :options="contaOptions" />
 
         <div class="flags">
           <OrenToggle v-model="form.previsto">Entra no previsto</OrenToggle>
-          <OrenToggle v-model="form.realizado">Já aconteceu (realizado)</OrenToggle>
+          <OrenToggle v-model="form.realizado">Já foi efetivado</OrenToggle>
           <OrenToggle v-if="form.tipo === 'despesa'" v-model="form.fixa">
             Despesa fixa
           </OrenToggle>
+        </div>
+
+        <!-- Efetivo: só ao efetivar -->
+        <template v-if="form.realizado">
+          <MoneyInput v-model="form.valorEfetivo" label="Valor efetivo (R$)" />
+        </template>
+
+        <div class="field">
+          <label>{{ form.realizado ? "Data de efetivação" : "Data prevista" }}</label>
+          <input v-model="form.dataISO" type="date" class="date-input" />
         </div>
       </div>
       <template #footer="{ close }">

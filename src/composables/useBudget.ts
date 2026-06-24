@@ -29,22 +29,33 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
 
   // Compras de cartão (cardId) NÃO entram no caixa — só o pagamento da fatura
   // pesa (via baixa de saldo). Excluímos aqui para evitar dupla contagem.
-  const sum = (pred: (t: (typeof txs.value)[number]) => boolean) =>
+  // O lado PREVISTO usa o valor previsto (a previsão); o lado REALIZADO usa o
+  // valor efetivo. Cada um cai no `valorPrevisto`/`valor` com fallback ao outro,
+  // para lançamentos antigos que só têm um dos campos.
+  type Tx = (typeof txs.value)[number];
+  const valPrevisto = (t: Tx) => t.valorPrevisto ?? t.valor;
+  const valEfetivo = (t: Tx) => t.valor ?? t.valorPrevisto ?? 0;
+
+  const sumBy = (pred: (t: Tx) => boolean, val: (t: Tx) => number) =>
     txs.value
       .filter((t) => !t.cardId)
       .filter(pred)
-      .reduce((s, t) => s + t.valor, 0);
+      .reduce((s, t) => s + val(t), 0);
 
-  // Mesma fórmula, conjuntos diferentes: o previsto enxerga TODOS os lançamentos
-  // previstos (mesmo já realizados); o realizado, todos os realizados.
+  // Mesma fórmula, conjuntos diferentes: o previsto enxerga os lançamentos
+  // previstos (pelo valor previsto); o realizado, os realizados (pelo efetivo).
   const receitasPrev = computed(() =>
-    sum((t) => t.tipo === "receita" && t.previsto),
+    sumBy((t) => t.tipo === "receita" && t.previsto, valPrevisto),
   );
   const despesasPrev = computed(() =>
-    sum((t) => t.tipo === "despesa" && t.previsto),
+    sumBy((t) => t.tipo === "despesa" && t.previsto, valPrevisto),
   );
-  const receitasReal = computed(() => sum((t) => t.tipo === "receita" && t.realizado));
-  const despesasReal = computed(() => sum((t) => t.tipo === "despesa" && t.realizado));
+  const receitasReal = computed(() =>
+    sumBy((t) => t.tipo === "receita" && t.realizado, valEfetivo),
+  );
+  const despesasReal = computed(() =>
+    sumBy((t) => t.tipo === "despesa" && t.realizado, valEfetivo),
+  );
 
   const previstoTotal = computed(
     () => saldoContas.value + receitasPrev.value - despesasPrev.value,
@@ -60,7 +71,7 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
 
   // Despesas fixas previstas do mês (sobre a receita prevista).
   const despesasFixas = computed(() =>
-    sum((t) => t.tipo === "despesa" && t.fixa && t.previsto),
+    sumBy((t) => t.tipo === "despesa" && t.fixa && t.previsto, valPrevisto),
   );
 
   const percentFixas = computed(() =>
