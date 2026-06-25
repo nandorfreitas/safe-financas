@@ -18,3 +18,6 @@ functions/node_modules/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Chave de service account (NUNCA commitar)
+serviceAccount*.json
