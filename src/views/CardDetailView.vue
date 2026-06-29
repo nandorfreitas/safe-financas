@@ -21,8 +21,9 @@ import {
   useAccounts,
   useCategories,
 } from "@/composables/useData";
-import { setValorFinal, pagarFatura, reabrirFatura } from "@/services/invoices";
+import { setValorPrevisto, pagarFatura, reabrirFatura } from "@/services/invoices";
 import { createCardPurchase, deleteCardPurchase } from "@/services/transactions";
+import { ensureSubscriptionCharges } from "@/services/subscriptions";
 import { formatBRL } from "@/lib/money";
 import {
   competenciaDe,
@@ -44,6 +45,20 @@ const invoices = useInvoices(cardId);
 const purchases = useCardTransactions(cardId);
 const accounts = useAccounts();
 const categories = useCategories();
+
+// Materializa as cobranças de assinaturas na fatura ao abrir cada mês
+// (idempotente). A fatura e as compras são reativas, então atualizam sozinhas.
+watch(
+  competencia,
+  async (comp) => {
+    try {
+      await ensureSubscriptionCharges(comp);
+    } catch (e) {
+      console.error(e);
+    }
+  },
+  { immediate: true },
+);
 
 const invoice = computed(
   () => invoices.value.find((i) => i.competencia === competencia.value) ?? null,
@@ -86,28 +101,28 @@ function fmtData(ts: Transaction["data"]) {
   }
 }
 
-// ── Editar valorFinal ──
-const valorFinalEdit = ref(0);
+// ── Editar a meta (valorPrevisto) ──
+const metaEdit = ref(0);
 watch(
   invoice,
   (inv) => {
-    valorFinalEdit.value = inv?.valorFinal ?? 0;
+    metaEdit.value = inv?.valorPrevisto ?? inv?.valorRegistrado ?? 0;
   },
   { immediate: true },
 );
 
-const salvandoFinal = ref(false);
-async function salvarValorFinal() {
+const salvandoMeta = ref(false);
+async function salvarMeta() {
   if (!invoice.value?.id) return;
-  salvandoFinal.value = true;
+  salvandoMeta.value = true;
   try {
-    await setValorFinal(cardId.value, invoice.value.id, valorFinalEdit.value);
-    toast.success("Valor final atualizado.");
+    await setValorPrevisto(cardId.value, invoice.value.id, metaEdit.value);
+    toast.success("Meta atualizada.");
   } catch (e) {
     toast.error("Não foi possível salvar.");
     console.error(e);
   } finally {
-    salvandoFinal.value = false;
+    salvandoMeta.value = false;
   }
 }
 
@@ -225,7 +240,7 @@ async function confirmarPagamento() {
       cardId.value,
       invoice.value.id,
       contaPagadora.value,
-      invoice.value.valorFinal,
+      invoice.value.valorRegistrado,
     );
     toast.success("Fatura paga — saldo da conta atualizado.");
     pagamentoModal.value = false;
@@ -245,7 +260,7 @@ async function desfazerPagamento() {
       cardId.value,
       invoice.value.id,
       invoice.value.pagaPorContaId,
-      invoice.value.valorFinal,
+      invoice.value.valorRegistrado,
     );
     toast.success("Fatura reaberta.");
   } catch (e) {
@@ -279,26 +294,28 @@ async function desfazerPagamento() {
       <OrenCard class="invoice-card">
         <div class="invoice-grid">
           <div class="metric">
-            <span class="metric__label">Valor registrado</span>
-            <span class="metric__value">{{ formatBRL(invoice?.valorRegistrado ?? 0) }}</span>
-            <span class="metric__hint">soma automática das compras</span>
-          </div>
-
-          <div class="metric">
-            <span class="metric__label">Valor final (o que se paga)</span>
+            <span class="metric__label">Valor previsto (meta)</span>
             <div class="final-edit">
-              <MoneyInput v-model="valorFinalEdit" :disabled="!invoice || invoice.status === 'paga'" />
+              <MoneyInput v-model="metaEdit" :disabled="!invoice || invoice.status === 'paga'" />
               <OrenButton
                 size="sm"
                 variant="secondary"
-                :loading="salvandoFinal"
+                :loading="salvandoMeta"
                 :disabled="!invoice || invoice.status === 'paga'"
-                @click="salvarValorFinal"
+                @click="salvarMeta"
               >
                 Salvar
               </OrenButton>
             </div>
-            <span class="metric__hint">editável — cobre compras não registradas</span>
+            <span class="metric__hint">sua meta de gasto — entra no previsto</span>
+          </div>
+
+          <div class="metric">
+            <span class="metric__label">Valor da fatura (o que se paga)</span>
+            <span class="metric__value">{{ formatBRL(invoice?.valorRegistrado ?? 0) }}</span>
+            <span class="metric__hint">
+              soma das compras — ajuste lançando uma compra extra
+            </span>
           </div>
 
           <div class="metric">
@@ -317,7 +334,7 @@ async function desfazerPagamento() {
             <OrenButton
               v-if="invoice && invoice.status === 'aberta'"
               variant="primary"
-              :disabled="invoice.valorFinal <= 0"
+              :disabled="invoice.valorRegistrado <= 0"
               @click="abrirPagamento"
             >
               Pagar fatura
@@ -402,8 +419,8 @@ async function desfazerPagamento() {
       <div class="form">
         <p class="hint">
           O pagamento <b>não é uma transação</b>: ele baixa o saldo da conta pagadora em
-          {{ formatBRL(invoice?.valorFinal ?? 0) }} e marca a fatura como paga. O gasto já
-          foi contabilizado nas compras.
+          {{ formatBRL(invoice?.valorRegistrado ?? 0) }} e marca a fatura como paga. O gasto
+          já foi contabilizado nas compras.
         </p>
         <OrenSelect v-model="contaPagadora" label="Conta pagadora" :options="contaOptions" />
       </div>

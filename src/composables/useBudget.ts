@@ -42,18 +42,22 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
     cashTx.value.filter(pred).reduce((s, t) => s + val(t), 0);
 
   // Faturas de cartão desta competência (já vêm filtradas pelo mês).
-  // Abertas = "mais uma despesa a pagar"; pagas = gasto já efetivado no mês.
+  // PROJEÇÃO (previsão antecipada): o cartão usa o valor REAL registrado, não a meta —
+  // é o que de fato será pago. Abertas e pagas entram pelo registrado.
   const faturasAbertas = computed(() =>
     faturas.value
       .filter((i) => i.status === "aberta")
-      .reduce((s, i) => s + i.valorFinal, 0),
+      .reduce((s, i) => s + i.valorRegistrado, 0),
   );
   const faturasPagas = computed(() =>
     faturas.value
       .filter((i) => i.status === "paga")
-      .reduce((s, i) => s + i.valorFinal, 0),
+      .reduce((s, i) => s + i.valorRegistrado, 0),
   );
-  const faturasTotal = computed(() => faturasAbertas.value + faturasPagas.value);
+  // Meta total (previsto) de todas as faturas do mês — só para o plano × real.
+  const faturasTotal = computed(() =>
+    faturas.value.reduce((s, i) => s + i.valorPrevisto, 0),
+  );
 
   // ── Pendentes (previsto e ainda não realizado) ──
   const aReceber = computed(() =>
@@ -97,6 +101,10 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
   const despesasEssenciais = computed(() =>
     sumP((t) => t.tipo === "despesa" && t.essencial && t.previsto, valPrev),
   );
+  // Despesas fixas (recorrentes) previstas do mês.
+  const despesasFixas = computed(() =>
+    sumP((t) => t.tipo === "despesa" && t.fixa && t.previsto, valPrev),
+  );
   const percentEssenciais = computed(() =>
     receitaPrevista.value === 0
       ? 0
@@ -125,5 +133,6 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
     divergenciaFlows,
     despesasEssenciais,
     percentEssenciais,
+    despesasFixas,
   };
 }

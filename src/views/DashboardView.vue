@@ -1,16 +1,45 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { OrenPage, OrenStatCard, OrenCard, OrenBadge } from "@/ui";
+import { OrenPage, OrenButton, OrenStatCard, OrenCard, OrenBadge } from "@/ui";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useBudget } from "@/composables/useBudget";
-import { useOpenInvoices } from "@/composables/useData";
+import {
+  useCardBills,
+  useSubscriptions,
+  useCategories,
+  refreshMonthData,
+  type CardBill,
+} from "@/composables/useData";
+import { ensureSubscriptionCharges } from "@/services/subscriptions";
 import { formatBRL } from "@/lib/money";
-import { competenciaDe, competenciaLabel } from "@/lib/competencia";
+import { addMeses, competenciaDe, competenciaLabel } from "@/lib/competencia";
 
 const router = useRouter();
 const wsStore = useWorkspaceStore();
 const competencia = ref(competenciaDe());
+
+// Assinaturas: materializa as cobranças do mês ao abri-lo (idempotente) e
+// recarrega os dados de fatura. Total mensal exibido em um card.
+const subs = useSubscriptions();
+const totalAssinaturas = computed(() =>
+  subs.value
+    .filter((s) => s.ativa && !s.arquivado && s.inicioCompetencia <= competencia.value)
+    .reduce((acc, s) => acc + s.valor, 0),
+);
+
+watch(
+  competencia,
+  async (comp) => {
+    try {
+      const criadas = await ensureSubscriptionCharges(comp);
+      if (criadas > 0) refreshMonthData();
+    } catch (e) {
+      console.error(e);
+    }
+  },
+  { immediate: true },
+);
 
 const {
   saldoAtual,
@@ -19,15 +48,64 @@ const {
   aPagar,
   recebidoMes,
   pagoMes,
+  faturasTotal,
   despesasEssenciais,
   percentEssenciais,
+  despesasFixas,
   totalInvestimentos,
+  txs,
 } = useBudget(competencia);
 
-const openInvoices = useOpenInvoices();
+// Faturas dos cartões: do mês selecionado (abertas ou pagas) + atrasadas.
+const faturas = useCardBills(competencia);
+
+// Sinal da projeção, para colorir (verde positivo / vermelho negativo).
+const projecaoPositiva = computed(() => projecaoSaldoFinal.value >= 0);
+
+// ── Gráfico 3: Despesas previstas por categoria (barras horizontais) ──
+const categories = useCategories();
+function catNome(id: string) {
+  return categories.value.find((c) => c.id === id)?.nome ?? "—";
+}
+function catCor(id: string) {
+  return categories.value.find((c) => c.id === id)?.cor ?? "var(--text-muted)";
+}
+const despesasPorCategoria = computed(() => {
+  const map = new Map<string, number>();
+  for (const t of txs.value) {
+    if (t.tipo !== "despesa" || !t.previsto || t.cardId) continue;
+    const k = t.categoryId ?? "";
+    map.set(k, (map.get(k) ?? 0) + (t.valorPrevisto ?? t.valor));
+  }
+  const arr = [...map.entries()].map(([id, valor]) => ({
+    nome: id ? catNome(id) : "Sem categoria",
+    cor: id ? catCor(id) : "var(--text-muted)",
+    valor,
+  }));
+  // Cartões entram no orçamento via fatura (não pela compra) — bucket próprio.
+  if (faturasTotal.value > 0) {
+    arr.push({ nome: "Cartões (faturas)", cor: "var(--oren-capital, #2563eb)", valor: faturasTotal.value });
+  }
+  return arr.filter((c) => c.valor > 0).sort((a, b) => b.valor - a.valor);
+});
+const maxCat = computed(() =>
+  Math.max(1, ...despesasPorCategoria.value.map((c) => c.valor)),
+);
+function larguraCat(v: number) {
+  return `${(v / maxCat.value) * 100}%`;
+}
 
 function fmtVenc(ms: number) {
   return ms ? new Date(ms).toLocaleDateString("pt-BR") : "—";
+}
+
+function statusVariant(b: CardBill) {
+  if (b.status === "paga") return "success";
+  return b.atrasada ? "error" : "warning";
+}
+function statusLabel(b: CardBill) {
+  if (b.status === "paga") return `paga ${fmtVenc(b.dataPagamentoMs)}`;
+  return b.atrasada ? "atrasada" : `vence ${fmtVenc(b.vencimentoMs)}`;
 }
 </script>
 
@@ -38,40 +116,55 @@ function fmtVenc(ms: number) {
     :description="`${wsStore.active?.name ?? ''} · ${competenciaLabel(competencia)}`"
   >
     <div class="page-pad">
-      <!-- Os dois números principais -->
-      <div class="cards-grid">
-        <OrenStatCard
-          label="Saldo atual"
-          :value="formatBRL(saldoAtual)"
-          tone="payments"
-          source="soma dos saldos das contas"
-        />
-        <OrenStatCard
-          label="Projeção de saldo final"
-          :value="formatBRL(projecaoSaldoFinal)"
-          tone="capital"
-          source="se tudo ocorrer como previsto"
-        />
-        <OrenStatCard
-          label="A receber"
-          :value="formatBRL(aReceber)"
-          source="recebimentos previstos pendentes"
-        />
-        <OrenStatCard
-          label="A pagar"
-          :value="formatBRL(aPagar)"
-          source="contas previstas + faturas em aberto"
-        />
+      <!-- Navegação de competência -->
+      <div class="month-nav">
+        <OrenButton size="sm" variant="ghost" @click="competencia = addMeses(competencia, -1)">
+          ‹
+        </OrenButton>
+        <span class="month-label">{{ competenciaLabel(competencia) }}</span>
+        <OrenButton size="sm" variant="ghost" @click="competencia = addMeses(competencia, 1)">
+          ›
+        </OrenButton>
       </div>
 
-      <!-- Secundários -->
-      <div class="cards-grid" style="margin-top: 16px">
-        <OrenStatCard label="Recebido no mês" :value="formatBRL(recebidoMes)" />
-        <OrenStatCard label="Gasto no mês" :value="formatBRL(pagoMes)" />
+      <!-- Destaque: a equação da projeção (Saldo + A receber − A pagar) -->
+      <section class="hero" :class="projecaoPositiva ? 'hero--pos' : 'hero--neg'">
+        <div class="hero__top">
+          <span class="hero__label">Projeção de saldo final</span>
+          <span class="hero__value">{{ formatBRL(projecaoSaldoFinal) }}</span>
+          <span class="hero__hint">
+            se tudo ocorrer como previsto em {{ competenciaLabel(competencia) }}
+          </span>
+        </div>
+        <div class="bridge">
+          <div class="bridge__item">
+            <span class="bridge__k">Saldo atual</span>
+            <span class="bridge__v">{{ formatBRL(saldoAtual) }}</span>
+          </div>
+          <span class="bridge__op">+</span>
+          <div class="bridge__item">
+            <span class="bridge__k">A receber</span>
+            <span class="bridge__v val-pos">{{ formatBRL(aReceber) }}</span>
+          </div>
+          <span class="bridge__op">−</span>
+          <div class="bridge__item">
+            <span class="bridge__k">A pagar</span>
+            <span class="bridge__v val-neg">{{ formatBRL(aPagar) }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Realizado no mês + patrimônio -->
+      <div class="sec-grid">
         <OrenStatCard
-          label="Despesas essenciais"
-          :value="formatBRL(despesasEssenciais)"
-          :delta-label="`${Math.round(percentEssenciais)}% da receita prevista`"
+          label="Recebido no mês"
+          :value="formatBRL(recebidoMes)"
+          source="receitas já recebidas"
+        />
+        <OrenStatCard
+          label="Gasto no mês"
+          :value="formatBRL(pagoMes)"
+          source="despesas + faturas pagas"
         />
         <OrenStatCard
           label="Investimentos"
@@ -81,67 +174,345 @@ function fmtVenc(ms: number) {
         />
       </div>
 
-      <OrenCard style="margin-top: 20px">
-        <template #title>Faturas em aberto</template>
-        <p v-if="openInvoices.length === 0" class="muted">Nenhuma fatura em aberto.</p>
-        <ul v-else class="invoices">
-          <li
-            v-for="inv in openInvoices"
-            :key="inv.invoiceId"
-            class="invoice-row"
-            @click="router.push({ name: 'card-detail', params: { cardId: inv.cardId } })"
-          >
-            <div class="invoice-row__main">
-              <strong>{{ inv.cardNome }}</strong>
-              <span class="muted">{{ competenciaLabel(inv.competencia) }}</span>
-            </div>
-            <div class="invoice-row__right">
-              <span>{{ formatBRL(inv.valorFinal) }}</span>
-              <OrenBadge variant="warning">vence {{ fmtVenc(inv.vencimentoMs) }}</OrenBadge>
-            </div>
+      <!-- Composição das despesas previstas (categorias se sobrepõem) -->
+      <OrenCard class="despesas">
+        <template #title>Despesas previstas do mês</template>
+        <div class="despesas__grid">
+          <div class="dz">
+            <span class="dz__k">Essenciais</span>
+            <span class="dz__v">{{ formatBRL(despesasEssenciais) }}</span>
+            <span class="dz__h">{{ Math.round(percentEssenciais) }}% da receita prevista</span>
+          </div>
+          <div class="dz">
+            <span class="dz__k">Fixas</span>
+            <span class="dz__v">{{ formatBRL(despesasFixas) }}</span>
+            <span class="dz__h">recorrentes</span>
+          </div>
+          <div class="dz">
+            <span class="dz__k">Assinaturas</span>
+            <span class="dz__v">{{ formatBRL(totalAssinaturas) }}</span>
+            <span class="dz__h">nas faturas dos cartões</span>
+          </div>
+        </div>
+        <p class="despesas__note">
+          São recortes da mesma despesa e podem se sobrepor (ex.: uma assinatura é fixa) —
+          não somam entre si.
+        </p>
+      </OrenCard>
+
+      <!-- Gráfico 3: Despesas previstas por categoria -->
+      <OrenCard class="comp">
+        <template #title>Despesas previstas por categoria — {{ competenciaLabel(competencia) }}</template>
+        <p v-if="despesasPorCategoria.length === 0" class="muted">
+          Sem despesas previstas neste mês.
+        </p>
+        <ul v-else class="comp__list">
+          <li v-for="c in despesasPorCategoria" :key="c.nome" class="comp__row">
+            <span class="comp__name">
+              <span class="comp__dot" :style="{ background: c.cor }" />
+              {{ c.nome }}
+            </span>
+            <span class="comp__track">
+              <span class="comp__fill" :style="{ width: larguraCat(c.valor), background: c.cor }" />
+            </span>
+            <span class="comp__v">{{ formatBRL(c.valor) }}</span>
           </li>
         </ul>
+      </OrenCard>
+
+      <OrenCard style="margin-top: 20px">
+        <template #title>Faturas dos cartões</template>
+        <p v-if="faturas.length === 0" class="muted">
+          Nenhuma fatura em {{ competenciaLabel(competencia) }}.
+        </p>
+        <div v-else class="bills-scroll">
+          <div class="bills">
+            <div class="bills__head">
+              <span>Cartão</span>
+              <span>Mês</span>
+              <span class="num">Prestações</span>
+              <span class="num">Meta (previsto)</span>
+              <span class="num">Fatura (realizado)</span>
+              <span>Status</span>
+            </div>
+            <div
+              v-for="b in faturas"
+              :key="b.invoiceId"
+              class="bills__row"
+              @click="router.push({ name: 'card-detail', params: { cardId: b.cardId } })"
+            >
+              <strong>{{ b.cardNome }}</strong>
+              <span class="muted">{{ competenciaLabel(b.competencia) }}</span>
+              <span class="num">{{ formatBRL(b.somaPrestacoes) }}</span>
+              <span class="num">{{ formatBRL(b.valorPrevisto) }}</span>
+              <span class="num">{{ formatBRL(b.valorRegistrado) }}</span>
+              <span><OrenBadge :variant="statusVariant(b)">{{ statusLabel(b) }}</OrenBadge></span>
+            </div>
+          </div>
+        </div>
       </OrenCard>
     </div>
   </OrenPage>
 </template>
 
 <style scoped>
+/* ── Destaque (hero): a equação da projeção ── */
+.hero {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+/* Tom suave conforme o sinal da projeção. */
+.hero--pos {
+  background: rgba(31, 122, 77, 0.07);
+  border-color: rgba(31, 122, 77, 0.35);
+}
+.hero--neg {
+  background: rgba(180, 35, 24, 0.07);
+  border-color: rgba(180, 35, 24, 0.35);
+}
+.hero--pos .hero__value {
+  color: #1f7a4d;
+}
+.hero--neg .hero__value {
+  color: #b42318;
+}
+.hero__top {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hero__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.hero__value {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.hero__hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.bridge {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle, var(--border-default));
+}
+.bridge__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bridge__k {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.bridge__v {
+  font-size: 18px;
+  font-weight: 600;
+}
+.bridge__op {
+  font-size: 20px;
+  color: var(--text-muted);
+}
+
+/* ── Realizado no mês + patrimônio ── */
+.sec-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) {
+  .sec-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Composição por categoria — barras horizontais */
+.comp {
+  margin-bottom: 20px;
+}
+.comp__list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.comp__row {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+.comp__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comp__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.comp__track {
+  height: 10px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-pill, 999px);
+  overflow: hidden;
+}
+.comp__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill, 999px);
+  min-width: 2px;
+}
+.comp__v {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .comp__row {
+    grid-template-columns: 110px 1fr auto;
+    gap: 8px;
+  }
+}
+
+/* ── Composição das despesas previstas ── */
+.despesas {
+  margin-bottom: 20px;
+}
+.despesas__grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+}
+.dz {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 24px;
+  border-left: 1px solid var(--border-subtle, var(--border-default));
+}
+.dz:first-child {
+  padding-left: 2px;
+  border-left: none;
+}
+@media (max-width: 600px) {
+  .despesas__grid {
+    grid-template-columns: 1fr;
+  }
+  .dz {
+    padding: 0;
+    border-left: none;
+  }
+  .dz + .dz {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle, var(--border-default));
+  }
+}
+.dz__k {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.dz__v {
+  font-size: 22px;
+  font-weight: 600;
+}
+.dz__h {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.despesas__note {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle, var(--border-default));
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.val-pos {
+  color: var(--action-primary, #1f7a4d);
+}
+.val-neg {
+  color: #b42318;
+}
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.month-label {
+  font-size: 16px;
+  font-weight: 500;
+  min-width: 160px;
+  text-align: center;
+}
+.month-label::first-letter {
+  text-transform: uppercase;
+}
 .muted {
   color: var(--text-muted);
   font-size: 14px;
   margin: 0;
 }
-.invoices {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
+.bills-scroll {
+  overflow-x: auto;
 }
-.invoice-row {
-  display: flex;
+.bills {
+  min-width: 680px;
+}
+.bills__head,
+.bills__row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr 1.1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 12px 4px;
+}
+.bills__head {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border-default);
+}
+.bills__row {
   border-bottom: 1px solid var(--border-subtle, var(--border-default));
   cursor: pointer;
 }
-.invoice-row:last-child {
+.bills__row:last-child {
   border-bottom: none;
 }
-.invoice-row:hover {
+.bills__row:hover {
   background: var(--surface-subtle);
 }
-.invoice-row__main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.invoice-row__right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 </style>

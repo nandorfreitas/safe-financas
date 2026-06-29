@@ -103,7 +103,7 @@ defineProps<{
 
 .op__body {
   flex: 1;
-  padding: 32px 40px;
+  padding: 0 40px 32px 40px;
   min-height: 0;
 }
 

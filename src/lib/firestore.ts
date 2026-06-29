@@ -15,7 +15,9 @@ import type {
   Card,
   Category,
   Invoice,
+  Loan,
   MonthlyReview,
+  Subscription,
   Transaction,
 } from "@/types/models";
 
@@ -36,6 +38,8 @@ function withId<T extends { id?: string }>(): FirestoreDataConverter<T> {
 const accountConverter = withId<Account>();
 const cardConverter = withId<Card>();
 const invoiceConverter = withId<Invoice>();
+const loanConverter = withId<Loan>();
+const subscriptionConverter = withId<Subscription>();
 const categoryConverter = withId<Category>();
 const transactionConverter = withId<Transaction>();
 const reviewConverter = withId<MonthlyReview>();
@@ -68,6 +72,24 @@ export function invoiceRef(
 ): DocumentReference<Invoice> {
   return doc(db, `${base(wsId)}/cards/${cardId}/invoices/${id}`).withConverter(
     invoiceConverter,
+  );
+}
+
+export function loansRef(wsId: string): CollectionReference<Loan> {
+  return collection(db, `${base(wsId)}/loans`).withConverter(loanConverter);
+}
+export function loanRef(wsId: string, id: string): DocumentReference<Loan> {
+  return doc(db, `${base(wsId)}/loans/${id}`).withConverter(loanConverter);
+}
+
+export function subscriptionsRef(wsId: string): CollectionReference<Subscription> {
+  return collection(db, `${base(wsId)}/subscriptions`).withConverter(
+    subscriptionConverter,
+  );
+}
+export function subscriptionRef(wsId: string, id: string): DocumentReference<Subscription> {
+  return doc(db, `${base(wsId)}/subscriptions/${id}`).withConverter(
+    subscriptionConverter,
   );
 }
 

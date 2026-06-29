@@ -16,6 +16,8 @@ import {
   faGear,
   faRightFromBracket,
   faPlus,
+  faHandHoldingDollar,
+  faRepeat,
 } from "@fortawesome/free-solid-svg-icons";
 
 export const icons = {
@@ -23,6 +25,8 @@ export const icons = {
   transactions: faRightLeft,
   accounts: faWallet,
   cards: faCreditCard,
+  loans: faHandHoldingDollar,
+  subscriptions: faRepeat,
   investments: faChartLine,
   categories: faTags,
   monthlyReview: faCalendarCheck,
@@ -43,6 +47,8 @@ export function registerIcons() {
     faGear,
     faRightFromBracket,
     faPlus,
+    faHandHoldingDollar,
+    faRepeat,
   );
 }
 

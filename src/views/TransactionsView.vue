@@ -55,8 +55,11 @@ const fixasParaCopiar = computed(() => {
   const existentes = new Set(txs.value.map((t) => t.descricao.toLowerCase()));
   return txsPrev.value.filter(
     (t) =>
-      t.tipo === "despesa" &&
       t.fixa &&
+      // Só lançamentos de caixa: cartão (compras/assinaturas) e empréstimos têm
+      // recorrência própria — não devem ser copiados aqui (evita duplicatas).
+      !t.cardId &&
+      !t.loanId &&
       !existentes.has(t.descricao.toLowerCase()),
   );
 });
@@ -71,7 +74,7 @@ async function copiarFixas() {
     for (const t of fixasParaCopiar.value) {
       const dia = Math.min(t.data.toDate().getDate(), ultimoDia);
       await createTransaction({
-        tipo: "despesa",
+        tipo: t.tipo,
         previsto: true,
         realizado: false,
         valor: t.valorPrevisto ?? t.valor,
@@ -80,7 +83,7 @@ async function copiarFixas() {
         accountId: t.accountId,
         categoryId: t.categoryId,
         fixa: true,
-        essencial: t.essencial ?? false,
+        essencial: t.tipo === "despesa" ? t.essencial ?? false : false,
         descricao: t.descricao,
       });
     }
@@ -162,7 +165,7 @@ const semNada = computed(() =>
 // Total previsto do segmento (somando faturas de cartão quando despesa).
 function totalSegmento(seg: Segmento): number {
   const rows = seg.rows.reduce((s, t) => s + prev(t), 0);
-  const fat = seg.faturas.reduce((s, f) => s + f.valorFinal, 0);
+  const fat = seg.faturas.reduce((s, f) => s + f.valorPrevisto, 0);
   return rows + fat;
 }
 
@@ -291,16 +294,15 @@ const tipoFormOptions: SelectOption[] = [
   { label: "Receita", value: "receita" },
 ];
 
-// Ao escolher categoria, herda os defaults de "fixa" e "essencial" (só despesa).
+// Ao escolher categoria, herda o default de "fixa" (despesa ou receita);
+// "essencial" só faz sentido em despesa.
 watch(
   () => form.categoryId,
   (id) => {
-    if (form.tipo !== "despesa") return;
     const cat = categories.value.find((c) => c.id === id);
-    if (cat) {
-      form.fixa = cat.fixaPorPadrao;
-      form.essencial = cat.essencialPorPadrao ?? false;
-    }
+    if (!cat) return;
+    form.fixa = cat.fixaPorPadrao;
+    form.essencial = form.tipo === "despesa" ? cat.essencialPorPadrao ?? false : false;
   },
 );
 
@@ -374,7 +376,7 @@ async function salvar() {
       data: new Date(form.dataISO + "T12:00:00"),
       accountId: form.accountId || undefined,
       categoryId: form.categoryId || undefined,
-      fixa: form.tipo === "despesa" ? form.fixa : false,
+      fixa: form.fixa,
       essencial: form.tipo === "despesa" ? form.essencial : false,
       descricao: form.descricao.trim(),
     };
@@ -479,7 +481,7 @@ async function remover(t: Transaction) {
               <OrenBadge v-else variant="warning">a pagar</OrenBadge>
             </div>
             <div class="fatura-row__right">
-              <span class="val-neg">−{{ formatBRL(f.valorFinal) }}</span>
+              <span class="val-neg">−{{ formatBRL(f.valorPrevisto) }}</span>
               <span class="prev-hint">
                 {{
                   f.status === "paga"
@@ -567,7 +569,7 @@ async function remover(t: Transaction) {
           <OrenToggle v-model="form.realizado">
             {{ form.tipo === "despesa" ? "Já paguei" : "Já recebi" }}
           </OrenToggle>
-          <OrenToggle v-if="form.tipo === 'despesa'" v-model="form.fixa">
+          <OrenToggle v-model="form.fixa">
             Fixa (repete nos próximos meses)
           </OrenToggle>
           <OrenToggle v-if="form.tipo === 'despesa'" v-model="form.essencial">

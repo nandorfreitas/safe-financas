@@ -37,8 +37,8 @@ export async function ensureInvoice(
     vencimento: vencimentoDe(diaVencimento, competencia),
     status: "aberta",
     valorRegistrado: 0,
-    valorFinal: 0,
-    valorFinalManual: false,
+    valorPrevisto: 0,
+    valorPrevistoManual: false,
     criadoPor: uid,
   };
   const ref = await addDoc(invoicesRef(wsId, cardId), data as Invoice);
@@ -46,9 +46,9 @@ export async function ensureInvoice(
 }
 
 /**
- * Aplica um delta (centavos) ao valorRegistrado de uma fatura. Enquanto o
- * valorFinal não foi editado à mão, ele acompanha o valorRegistrado (default
- * do escopo). Usado ao criar/remover compras e parcelas.
+ * Aplica um delta (centavos) ao valorRegistrado (realizado) de uma fatura.
+ * Enquanto a meta (valorPrevisto) não foi definida à mão, ela acompanha o
+ * registrado. Usado ao criar/remover compras e parcelas.
  */
 export async function applyRegistradoDelta(
   cardId: string,
@@ -58,22 +58,25 @@ export async function applyRegistradoDelta(
   const { wsId } = ctx();
   const ref = invoiceRef(wsId, cardId, invoiceId);
   const snap = await getDoc(ref);
-  const manual = snap.data()?.valorFinalManual ?? false;
-  const patch: Record<string, unknown> = { valorRegistrado: increment(delta) };
-  if (!manual) patch.valorFinal = increment(delta);
+  const d = snap.data();
+  const manual = d?.valorPrevistoManual ?? false;
+  // Recalcula (em vez de increment) para auto-curar faturas antigas sem o campo.
+  const novoRegistrado = (d?.valorRegistrado ?? 0) + delta;
+  const patch: Record<string, unknown> = { valorRegistrado: novoRegistrado };
+  if (!manual) patch.valorPrevisto = novoRegistrado;
   await updateDoc(ref, patch);
 }
 
-/** O número que vale (entra no orçamento). Editável livremente. */
-export async function setValorFinal(
+/** Define a META (valorPrevisto) da fatura — o previsto que entra no orçamento. */
+export async function setValorPrevisto(
   cardId: string,
   invoiceId: string,
-  valorFinal: number,
+  valorPrevisto: number,
 ): Promise<void> {
   const { wsId } = ctx();
   await updateDoc(invoiceRef(wsId, cardId, invoiceId), {
-    valorFinal,
-    valorFinalManual: true,
+    valorPrevisto,
+    valorPrevistoManual: true,
   });
 }
 
@@ -89,17 +92,18 @@ export async function setValorRegistrado(
 
 /**
  * Pagamento da fatura: NÃO é transação (anti-dupla-contagem). São duas ações
- * atômicas — o saldo da conta pagadora desce o valorFinal e a fatura marca "paga".
+ * atômicas — o saldo da conta pagadora desce o valor pago (o valorRegistrado,
+ * que é o que de fato se paga) e a fatura marca "paga".
  */
 export async function pagarFatura(
   cardId: string,
   invoiceId: string,
   contaId: string,
-  valorFinal: number,
+  valor: number,
 ): Promise<void> {
   const { wsId } = ctx();
   const batch = writeBatch(db);
-  batch.update(accountRef(wsId, contaId), { saldo: increment(-valorFinal) });
+  batch.update(accountRef(wsId, contaId), { saldo: increment(-valor) });
   batch.update(invoiceRef(wsId, cardId, invoiceId), {
     status: "paga",
     pagaPorContaId: contaId,
@@ -113,11 +117,11 @@ export async function reabrirFatura(
   cardId: string,
   invoiceId: string,
   contaId: string,
-  valorFinal: number,
+  valor: number,
 ): Promise<void> {
   const { wsId } = ctx();
   const batch = writeBatch(db);
-  batch.update(accountRef(wsId, contaId), { saldo: increment(valorFinal) });
+  batch.update(accountRef(wsId, contaId), { saldo: increment(valor) });
   batch.update(invoiceRef(wsId, cardId, invoiceId), {
     status: "aberta",
     pagaPorContaId: deleteField(),

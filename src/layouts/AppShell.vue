@@ -32,6 +32,8 @@ const groups = [
     items: [
       { key: "accounts", label: "Contas", icon: icons.accounts },
       { key: "cards", label: "Cartões", icon: icons.cards },
+      { key: "loans", label: "Empréstimos", icon: icons.loans },
+      { key: "subscriptions", label: "Assinaturas", icon: icons.subscriptions },
       { key: "investments", label: "Investimentos", icon: icons.investments },
     ],
   },

@@ -62,6 +62,25 @@ service cloud.firestore {
         }
       }
 
+      // ── Empréstimos (entidade-raiz, carrega visibilidade) ──
+      // As prestações são transações comuns (denormalizadas) na coleção
+      // /transactions; aqui só o doc agrupador do empréstimo.
+      match /loans/{loanId} {
+        allow read: if isMember(wsId) && canSeeEntity(resource.data);
+        allow create: if isMember(wsId)
+          && request.resource.data.donoUid == request.auth.uid;
+        allow update, delete: if isMember(wsId) && canSeeEntity(resource.data);
+      }
+
+      // ── Assinaturas (entidade-raiz; visibilidade herdada do cartão) ──
+      // As cobranças são transações comuns (denormalizadas) em /transactions.
+      match /subscriptions/{subId} {
+        allow read: if isMember(wsId) && canSeeEntity(resource.data);
+        allow create: if isMember(wsId)
+          && request.resource.data.donoUid == request.auth.uid;
+        allow update, delete: if isMember(wsId) && canSeeEntity(resource.data);
+      }
+
       // ── Categorias: nível de workspace, sem visibilidade por entidade ──
       match /categories/{catId} {
         allow read, write: if isMember(wsId);
