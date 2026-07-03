@@ -86,6 +86,11 @@ service cloud.firestore {
         allow read, write: if isMember(wsId);
       }
 
+      // ── Dicas de categorização (aprendizado do import): nível de workspace ──
+      match /categoryHints/{key} {
+        allow read, write: if isMember(wsId);
+      }
+
       // ── Transações: visibilidade DENORMALIZADA (_visibilidade/_donoUid) ──
       match /transactions/{txId} {
         function canSeeTx(data) {

@@ -13,6 +13,7 @@ import {
 } from "@/ui";
 import type { Column, SelectOption } from "@/ui";
 import MoneyInput from "@/components/MoneyInput.vue";
+import AutoCategorizeModal from "@/components/AutoCategorizeModal.vue";
 import { useRouter } from "vue-router";
 import {
   useAccounts,
@@ -27,6 +28,7 @@ import {
 } from "@/services/transactions";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { formatBRL } from "@/lib/money";
+import { categoryOptions } from "@/lib/categoryTree";
 import {
   competenciaDe,
   competenciaLabel,
@@ -99,6 +101,16 @@ async function copiarFixas() {
 function fmtVenc(ms: number) {
   return ms ? new Date(ms).toLocaleDateString("pt-BR") : "—";
 }
+
+// ── Categorizar automaticamente ──
+// Despesas do mês (inclui compras de cartão) ainda sem categoria.
+const catModalOpen = ref(false);
+const semCategoria = computed(
+  () =>
+    txs.value.filter(
+      (t) => t.tipo === "despesa" && !t.categoryId,
+    ) as Transaction[],
+);
 
 const contas = computed(() =>
   accounts.value.filter((a) => a.tipo === "conta" && !a.arquivada),
@@ -276,13 +288,10 @@ watch(
   },
 );
 
-// Opções de categoria conforme o tipo selecionado.
-const categoriaOptions = computed<SelectOption[]>(() => [
-  { label: "— sem categoria —", value: "" },
-  ...categories.value
-    .filter((c) => c.tipo === form.tipo && !c.arquivada)
-    .map((c) => ({ label: c.nome, value: c.id ?? "" })),
-]);
+// Opções de categoria conforme o tipo selecionado (com subcategorias indentadas).
+const categoriaOptions = computed<SelectOption[]>(() =>
+  categoryOptions(categories.value, form.tipo, { label: "— sem categoria —" }),
+);
 
 const contaOptions = computed<SelectOption[]>(() => [
   { label: "— sem conta —", value: "" },
@@ -420,6 +429,13 @@ async function remover(t: Transaction) {
 <template>
   <OrenPage subtitle="Visão geral" title="Transações">
     <template #actions>
+      <OrenButton
+        v-if="semCategoria.length"
+        variant="secondary"
+        @click="catModalOpen = true"
+      >
+        Categorizar {{ semCategoria.length }} sem categoria
+      </OrenButton>
       <OrenButton variant="primary" @click="abrirNovo">Novo lançamento</OrenButton>
     </template>
 
@@ -603,6 +619,9 @@ async function remover(t: Transaction) {
         <OrenButton variant="primary" :loading="saving" @click="salvar">Salvar</OrenButton>
       </template>
     </OrenModal>
+
+    <!-- Categorização automática em lote -->
+    <AutoCategorizeModal v-model="catModalOpen" :transactions="semCategoria" />
   </OrenPage>
 </template>
 

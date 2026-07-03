@@ -14,6 +14,7 @@ import type {
   Account,
   Card,
   Category,
+  CategoryHint,
   Invoice,
   Loan,
   MonthlyReview,
@@ -41,6 +42,7 @@ const invoiceConverter = withId<Invoice>();
 const loanConverter = withId<Loan>();
 const subscriptionConverter = withId<Subscription>();
 const categoryConverter = withId<Category>();
+const categoryHintConverter = withId<CategoryHint>();
 const transactionConverter = withId<Transaction>();
 const reviewConverter = withId<MonthlyReview>();
 
@@ -98,6 +100,13 @@ export function categoriesRef(wsId: string): CollectionReference<Category> {
 }
 export function categoryRef(wsId: string, id: string): DocumentReference<Category> {
   return doc(db, `${base(wsId)}/categories/${id}`).withConverter(categoryConverter);
+}
+
+export function categoryHintsRef(wsId: string): CollectionReference<CategoryHint> {
+  return collection(db, `${base(wsId)}/categoryHints`).withConverter(categoryHintConverter);
+}
+export function categoryHintRef(wsId: string, key: string): DocumentReference<CategoryHint> {
+  return doc(db, `${base(wsId)}/categoryHints/${key}`).withConverter(categoryHintConverter);
 }
 
 export function transactionsRef(wsId: string): CollectionReference<Transaction> {

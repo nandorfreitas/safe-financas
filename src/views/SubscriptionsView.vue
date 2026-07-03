@@ -7,6 +7,7 @@ import {
   OrenModal,
   OrenInput,
   OrenSelect,
+  OrenToggle,
   useToast,
 } from "@/ui";
 import type { SelectOption } from "@/ui";
@@ -19,6 +20,7 @@ import {
   deleteSubscription,
 } from "@/services/subscriptions";
 import { formatBRL } from "@/lib/money";
+import { categoryOptions } from "@/lib/categoryTree";
 import type { Subscription } from "@/types/models";
 
 const toast = useToast();
@@ -49,12 +51,9 @@ function nomeCategoria(id?: string) {
 const cardOptions = computed<SelectOption[]>(() =>
   cartoesAtivos.value.map((c) => ({ label: c.nome, value: c.id ?? "" })),
 );
-const categoriaOptions = computed<SelectOption[]>(() => [
-  { label: "— sem categoria —", value: "" },
-  ...categories.value
-    .filter((c) => c.tipo === "despesa" && !c.arquivada)
-    .map((c) => ({ label: c.nome, value: c.id ?? "" })),
-]);
+const categoriaOptions = computed<SelectOption[]>(() =>
+  categoryOptions(categories.value, "despesa", { label: "— sem categoria —" }),
+);
 
 // ── Criar / editar ──
 const modalOpen = ref(false);
@@ -65,6 +64,7 @@ const form = reactive({
   valor: 0,
   cardId: "",
   categoryId: "",
+  compartilhado: true,
 });
 
 function abrirNovo() {
@@ -78,6 +78,7 @@ function abrirNovo() {
     valor: 0,
     cardId: cartoesAtivos.value[0]?.id ?? "",
     categoryId: "",
+    compartilhado: true,
   });
   modalOpen.value = true;
 }
@@ -89,6 +90,7 @@ function abrirEdicao(s: Subscription) {
     valor: s.valor,
     cardId: s.cardId,
     categoryId: s.categoryId ?? "",
+    compartilhado: s.visibilidade === "compartilhada",
   });
   modalOpen.value = true;
 }
@@ -98,12 +100,14 @@ async function salvar() {
     toast.error("Informe uma descrição.");
     return;
   }
+  const visibilidade = form.compartilhado ? "compartilhada" : "pessoal";
   saving.value = true;
   try {
     if (editingId.value) {
       await updateSubscription(editingId.value, {
         descricao: form.descricao.trim(),
         categoryId: form.categoryId || null,
+        visibilidade,
       });
       toast.success("Assinatura atualizada.");
     } else {
@@ -120,6 +124,7 @@ async function salvar() {
         valor: form.valor,
         cardId: form.cardId,
         categoryId: form.categoryId || undefined,
+        visibilidade,
       });
       toast.success("Assinatura criada — cobrança lançada na fatura do mês.");
     }
@@ -194,6 +199,7 @@ async function remover(s: Subscription) {
             <span>Cartão</span>
             <span>Categoria</span>
             <span class="num">Valor/mês</span>
+            <span>Visível</span>
             <span>Status</span>
             <span></span>
           </div>
@@ -202,6 +208,11 @@ async function remover(s: Subscription) {
             <span class="muted">{{ nomeCartao(s.cardId) }}</span>
             <span class="muted">{{ nomeCategoria(s.categoryId) }}</span>
             <span class="num">{{ formatBRL(s.valor) }}</span>
+            <span>
+              <OrenBadge :variant="s.visibilidade === 'compartilhada' ? 'info' : 'neutral'">
+                {{ s.visibilidade === "compartilhada" ? "Compartilhada" : "Pessoal" }}
+              </OrenBadge>
+            </span>
             <span>
               <OrenBadge :variant="s.ativa ? 'success' : 'neutral'">
                 {{ s.ativa ? "Ativa" : "Pausada" }}
@@ -247,6 +258,7 @@ async function remover(s: Subscription) {
           Valor e cartão não mudam após a criação. Para alterá-los, exclua e recrie.
         </p>
         <OrenSelect v-model="form.categoryId" label="Categoria" :options="categoriaOptions" />
+        <OrenToggle v-model="form.compartilhado">Compartilhar com o workspace</OrenToggle>
         <p class="hint">
           A cobrança é lançada na fatura do cartão todo mês (despesa fixa, não essencial).
         </p>
@@ -299,12 +311,12 @@ async function remover(s: Subscription) {
   border-radius: var(--radius);
 }
 .subs {
-  min-width: 720px;
+  min-width: 820px;
 }
 .subs__head,
 .subs__row {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr 0.9fr 0.8fr auto;
+  grid-template-columns: 1.6fr 1fr 1fr 0.9fr 0.9fr 0.8fr auto;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;

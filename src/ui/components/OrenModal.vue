@@ -13,8 +13,9 @@ const props = withDefaults(
     modelValue: boolean;
     title?: string;
     closeOnOverlay?: boolean;
+    size?: "md" | "lg";
   }>(),
-  { closeOnOverlay: true },
+  { closeOnOverlay: true, size: "md" },
 );
 
 const emit = defineEmits<{ (e: "update:modelValue", value: boolean): void }>();
@@ -34,7 +35,7 @@ function onOutside(e: Event) {
     <DialogPortal>
       <DialogOverlay class="oren-overlay" />
       <DialogContent
-        class="oren-modal"
+        :class="['oren-modal', `oren-modal--${size}`]"
         :aria-describedby="undefined"
         @pointer-down-outside="onOutside"
         @interact-outside="onOutside"
@@ -74,7 +75,12 @@ function onOutside(e: Event) {
   padding: 26px;
   max-width: 420px;
   width: calc(100% - 40px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.oren-modal--lg {
+  max-width: 780px;
 }
 .oren-modal:focus {
   outline: none;

@@ -15,6 +15,7 @@ import {
   accountsRef,
   cardsRef,
   categoriesRef,
+  categoryHintsRef,
   invoicesRef,
   loansRef,
   reviewRef,
@@ -387,6 +388,64 @@ export function useCardBills(
   return result;
 }
 
+/**
+ * Compras de cartão (compras/parcelas) de uma competência = mês da FATURA.
+ * Diferente de `useTransactionsMonth`, que filtra por `data` (data da compra):
+ * aqui o filtro é por `competencia`, ou seja, o mês em que a fatura é paga — que
+ * é como o gasto do cartão deve ser atribuído no dashboard. Duas queries por
+ * cartão (visibilidade), filtrando a competência no cliente. Leitura pontual.
+ */
+export function useCardTransactionsMonth(
+  competencia: MaybeRefOrGetter<Competencia>,
+): Ref<Transaction[]> {
+  const { wsId, uid } = useCtxRefs();
+  const cards = useCards();
+  const result = ref<Transaction[]>([]);
+
+  watch(
+    [cards, wsId, uid, () => toValue(competencia), monthTick],
+    async ([cardList, ws, user, comp]) => {
+      if (!ws || !comp) {
+        result.value = [];
+        return;
+      }
+      const ativos = cardList.filter((c) => !c.arquivado && c.id);
+      const all: Transaction[] = [];
+      await Promise.all(
+        ativos.map(async (c) => {
+          const cardId = c.id as string;
+          const [snapCompart, snapMinhas] = await Promise.all([
+            getDocs(
+              query(
+                transactionsRef(ws),
+                where("cardId", "==", cardId),
+                where("_visibilidade", "==", "compartilhada"),
+              ),
+            ),
+            user
+              ? getDocs(
+                  query(
+                    transactionsRef(ws),
+                    where("cardId", "==", cardId),
+                    where("_donoUid", "==", user),
+                  ),
+                )
+              : null,
+          ]);
+          const map = new Map<string, Transaction>();
+          for (const d of snapCompart.docs) map.set(d.id, d.data());
+          if (snapMinhas) for (const d of snapMinhas.docs) map.set(d.id, d.data());
+          for (const t of map.values()) if (t.competencia === comp) all.push(t);
+        }),
+      );
+      result.value = all;
+    },
+    { immediate: true, deep: true },
+  );
+
+  return result;
+}
+
 export interface FlowTrend {
   labels: string[];
   receitas: number[];
@@ -526,6 +585,19 @@ export function useCategories() {
   return useCollection(
     computed(() => (wsId.value ? categoriesRef(wsId.value) : null)),
   );
+}
+
+/** Dicas de categorização aprendidas: mapa merchantKey → categoryId. */
+export function useCategoryHints() {
+  const { wsId } = useCtxRefs();
+  const col = useCollection(
+    computed(() => (wsId.value ? categoryHintsRef(wsId.value) : null)),
+  );
+  return computed<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const h of col.value) if (h.id && h.categoryId) map[h.id] = h.categoryId;
+    return map;
+  });
 }
 
 /** Transações de uma competência, respeitando a visibilidade (duas queries). */

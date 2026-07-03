@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import {
   OrenPage,
   OrenButton,
@@ -23,11 +23,22 @@ import type { Category, TipoCategoria } from "@/types/models";
 const toast = useToast();
 const categories = useCategories();
 
-const visiveis = computed(() =>
-  [...categories.value]
-    .filter((c) => !c.arquivada)
-    .sort((a, b) => a.nome.localeCompare(b.nome)),
-);
+// Ordena agrupando subcategorias sob o pai (topo por tipo+nome, depois subs).
+const ordenadas = computed<Category[]>(() => {
+  const ativas = categories.value.filter((c) => !c.arquivada);
+  const byNome = (a: Category, b: Category) => a.nome.localeCompare(b.nome);
+  const tops = ativas
+    .filter((c) => !c.parentId)
+    .sort((a, b) => a.tipo.localeCompare(b.tipo) || byNome(a, b));
+  const idsTop = new Set(tops.map((t) => t.id));
+  const out: Category[] = [];
+  for (const t of tops) {
+    out.push(t);
+    for (const s of ativas.filter((c) => c.parentId === t.id).sort(byNome)) out.push(s);
+  }
+  for (const c of ativas) if (c.parentId && !idsTop.has(c.parentId)) out.push(c);
+  return out;
+});
 
 const columns: Column<Category>[] = [
   { key: "nome", label: "Nome" },
@@ -49,16 +60,30 @@ const saving = ref(false);
 const form = reactive({
   nome: "",
   tipo: "despesa" as TipoCategoria,
+  parentId: "",
   cor: "#1f7a4d",
   fixaPorPadrao: false,
   essencialPorPadrao: false,
 });
+
+// Opções de categoria-pai: categorias de topo do mesmo tipo (exceto a própria).
+const parentOptions = computed<SelectOption[]>(() => [
+  { label: "— nenhuma (categoria de topo) —", value: "" },
+  ...categories.value
+    .filter(
+      (c) =>
+        c.tipo === form.tipo && !c.arquivada && !c.parentId && c.id !== editingId.value,
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .map((c) => ({ label: c.nome, value: c.id ?? "" })),
+]);
 
 function abrirNovo() {
   editingId.value = null;
   Object.assign(form, {
     nome: "",
     tipo: "despesa",
+    parentId: "",
     cor: "#1f7a4d",
     fixaPorPadrao: false,
     essencialPorPadrao: false,
@@ -71,12 +96,21 @@ function abrirEdicao(c: Category) {
   Object.assign(form, {
     nome: c.nome,
     tipo: c.tipo,
+    parentId: c.parentId ?? "",
     cor: c.cor,
     fixaPorPadrao: c.fixaPorPadrao,
     essencialPorPadrao: c.essencialPorPadrao ?? false,
   });
   modalOpen.value = true;
 }
+
+// Trocar o tipo invalida o pai selecionado (pais são por tipo).
+watch(
+  () => form.tipo,
+  () => {
+    form.parentId = "";
+  },
+);
 
 async function salvar() {
   if (!form.nome.trim()) {
@@ -85,11 +119,21 @@ async function salvar() {
   }
   saving.value = true;
   try {
+    const base = {
+      nome: form.nome.trim(),
+      tipo: form.tipo,
+      cor: form.cor,
+      fixaPorPadrao: form.fixaPorPadrao,
+      essencialPorPadrao: form.essencialPorPadrao,
+    };
     if (editingId.value) {
-      await updateCategory(editingId.value, { ...form });
+      await updateCategory(editingId.value, {
+        ...base,
+        parentId: form.parentId || null,
+      });
       toast.success("Categoria atualizada.");
     } else {
-      await createCategory({ ...form });
+      await createCategory({ ...base, parentId: form.parentId || undefined });
       toast.success("Categoria criada.");
     }
     modalOpen.value = false;
@@ -121,11 +165,16 @@ async function remover(c: Category) {
     </template>
 
     <div class="page-pad">
-      <p v-if="visiveis.length === 0" class="empty">
+      <p v-if="ordenadas.length === 0" class="empty">
         Nenhuma categoria ainda. Crie a primeira para classificar seus lançamentos.
       </p>
 
-      <OrenTable v-else :columns="columns" :rows="visiveis">
+      <OrenTable v-else :columns="columns" :rows="ordenadas">
+        <template #cell-nome="{ row }">
+          <span :class="{ 'sub-name': row.parentId }">
+            <span v-if="row.parentId" class="sub-mark">↳</span>{{ row.nome }}
+          </span>
+        </template>
         <template #cell-tipo="{ value }">
           <OrenBadge :variant="value === 'receita' ? 'success' : 'neutral'">
             {{ value === "receita" ? "Receita" : "Despesa" }}
@@ -154,6 +203,11 @@ async function remover(c: Category) {
       <div class="form">
         <OrenInput v-model="form.nome" label="Nome" placeholder="Ex.: Mercado" />
         <OrenSelect v-model="form.tipo" label="Tipo" :options="tipoOptions" />
+        <OrenSelect
+          v-model="form.parentId"
+          label="Categoria pai (opcional)"
+          :options="parentOptions"
+        />
         <div class="field-cor">
           <label>Cor</label>
           <input v-model="form.cor" type="color" class="color-input" />
@@ -179,6 +233,13 @@ async function remover(c: Category) {
 .empty {
   color: var(--text-muted);
   font-size: 14px;
+}
+.sub-name {
+  color: var(--text-muted);
+}
+.sub-mark {
+  margin-right: 6px;
+  opacity: 0.6;
 }
 .form {
   display: flex;

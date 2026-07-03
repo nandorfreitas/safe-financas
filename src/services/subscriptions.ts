@@ -34,6 +34,7 @@ import type {
   Subscription,
   TipoTransacao,
   Transaction,
+  Visibilidade,
 } from "@/types/models";
 import { competenciaDe, vencimentoDe } from "@/lib/competencia";
 import { ensureInvoice, applyRegistradoDelta } from "./invoices";
@@ -45,6 +46,8 @@ export interface SubscriptionInput {
   valor: number;
   cardId: string;
   categoryId?: string;
+  /** Compartilhada por padrão; editável. */
+  visibilidade: Visibilidade;
 }
 
 /** Remove chaves undefined (Firestore rejeita undefined). */
@@ -110,7 +113,7 @@ export async function createSubscription(input: SubscriptionInput): Promise<stri
     inicioCompetencia: inicio,
     ativa: true,
     donoUid: uid, // autor (a regra de create exige donoUid == auth.uid)
-    visibilidade: card.visibilidade, // herda do cartão
+    visibilidade: input.visibilidade, // compartilhada por padrão; editável
     arquivado: false,
     criadoPor: uid,
     createdAt: serverTimestamp(),
@@ -169,8 +172,9 @@ export async function ensureSubscriptionCharges(
       descricao: s.descricao,
       criadoPor: uid,
       createdAt: serverTimestamp(),
-      _donoUid: card.donoUid,
-      _visibilidade: card.visibilidade,
+      // Visibilidade da própria assinatura (não do cartão).
+      _donoUid: s.donoUid,
+      _visibilidade: s.visibilidade,
     });
     await setDoc(ref, data as unknown as Transaction);
     await applyRegistradoDelta(s.cardId, invoiceId, s.valor);
@@ -186,19 +190,29 @@ export async function ensureSubscriptionCharges(
  */
 export async function updateSubscription(
   id: string,
-  patch: { descricao?: string; categoryId?: string | null; ativa?: boolean },
+  patch: {
+    descricao?: string;
+    categoryId?: string | null;
+    ativa?: boolean;
+    visibilidade?: Visibilidade;
+  },
 ): Promise<void> {
   const { wsId, uid } = ctx();
 
   const subPatch: Record<string, unknown> = {};
   if (patch.descricao !== undefined) subPatch.descricao = patch.descricao;
   if (patch.ativa !== undefined) subPatch.ativa = patch.ativa;
+  if (patch.visibilidade !== undefined) subPatch.visibilidade = patch.visibilidade;
   if (patch.categoryId !== undefined) {
     subPatch.categoryId = patch.categoryId ? patch.categoryId : deleteField();
   }
   await updateDoc(subscriptionRef(wsId, id), subPatch);
 
-  if (patch.descricao === undefined && patch.categoryId === undefined) return;
+  const precisaPropagar =
+    patch.descricao !== undefined ||
+    patch.categoryId !== undefined ||
+    patch.visibilidade !== undefined;
+  if (!precisaPropagar) return;
 
   const charges = await fetchSubscriptionCharges(wsId, uid, id);
   if (charges.length === 0) return;
@@ -207,6 +221,7 @@ export async function updateSubscription(
     if (!t.id) continue;
     const p: Record<string, unknown> = {};
     if (patch.descricao !== undefined) p.descricao = patch.descricao;
+    if (patch.visibilidade !== undefined) p._visibilidade = patch.visibilidade;
     if (patch.categoryId !== undefined) {
       p.categoryId = patch.categoryId ? patch.categoryId : deleteField();
     }

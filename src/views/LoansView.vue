@@ -22,6 +22,7 @@ import {
   backfillLoansFixa,
 } from "@/services/loans";
 import { formatBRL } from "@/lib/money";
+import { categoryOptions } from "@/lib/categoryTree";
 import type { Loan, TipoTransacao } from "@/types/models";
 
 const router = useRouter();
@@ -87,12 +88,9 @@ const form = reactive({
 const totalPreview = computed(() => form.valorParcela * Number(form.parcelas || 0));
 
 // Categorias do tipo selecionado (despesa para "a pagar", receita para "a receber").
-const categoriaOptions = computed<SelectOption[]>(() => [
-  { label: "Empréstimos (padrão)", value: "" },
-  ...categories.value
-    .filter((c) => c.tipo === form.tipo && !c.arquivada)
-    .map((c) => ({ label: c.nome, value: c.id ?? "" })),
-]);
+const categoriaOptions = computed<SelectOption[]>(() =>
+  categoryOptions(categories.value, form.tipo, { label: "Empréstimos (padrão)" }),
+);
 
 function abrirNovo() {
   editingId.value = null;

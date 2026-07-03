@@ -12,14 +12,21 @@ import {
   useToast,
 } from "@/ui";
 import MoneyInput from "@/components/MoneyInput.vue";
-import { useCards } from "@/composables/useData";
+import { useCards, useInvoicesMonth } from "@/composables/useData";
 import { createCard, updateCard, deleteCard } from "@/services/cards";
 import { formatBRL } from "@/lib/money";
+import { competenciaDe } from "@/lib/competencia";
 import type { Card } from "@/types/models";
 
 const router = useRouter();
 const toast = useToast();
 const cards = useCards();
+
+// Fatura da competência vigente por cartão (para mostrar o valor atual no card).
+const faturasMes = useInvoicesMonth(competenciaDe());
+function faturaAtual(cardId?: string) {
+  return cardId ? faturasMes.value.find((f) => f.cardId === cardId) ?? null : null;
+}
 
 const visiveis = computed(() =>
   [...cards.value]
@@ -143,6 +150,21 @@ function abrirDetalhe(c: Card) {
             </div>
           </template>
 
+          <div class="tile-fatura">
+            <span class="tile-fatura__label">Fatura atual</span>
+            <div class="tile-fatura__row">
+              <span class="tile-fatura__value">
+                {{ formatBRL(faturaAtual(c.id)?.valorRegistrado ?? 0) }}
+              </span>
+              <OrenBadge
+                v-if="faturaAtual(c.id)"
+                :variant="faturaAtual(c.id)?.status === 'paga' ? 'success' : 'warning'"
+              >
+                {{ faturaAtual(c.id)?.status === "paga" ? "Paga" : "Aberta" }}
+              </OrenBadge>
+            </div>
+          </div>
+
           <ul class="tile-info">
             <li><span>Bandeira</span><b>{{ c.bandeira || "—" }}</b></li>
             <li><span>Vencimento</span><b>dia {{ c.diaVencimento }}</b></li>
@@ -153,11 +175,17 @@ function abrirDetalhe(c: Card) {
 
           <template #footer>
             <div class="tile-actions">
-              <OrenButton size="sm" variant="primary" @click="abrirDetalhe(c)">
-                Faturas
+              <OrenButton size="sm" variant="primary" block @click="abrirDetalhe(c)">
+                Ver faturas
               </OrenButton>
-              <OrenButton size="sm" variant="ghost" @click="abrirEdicao(c)">Editar</OrenButton>
-              <OrenButton size="sm" variant="danger" @click="remover(c)">Excluir</OrenButton>
+              <div class="tile-actions__sec">
+                <OrenButton size="sm" variant="ghost" block @click="abrirEdicao(c)">
+                  Editar
+                </OrenButton>
+                <OrenButton size="sm" variant="danger" block @click="remover(c)">
+                  Excluir
+                </OrenButton>
+              </div>
             </div>
           </template>
         </OrenCard>
@@ -214,10 +242,40 @@ function abrirDetalhe(c: Card) {
 .tile-info span {
   color: var(--text-muted);
 }
+.tile-fatura {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  margin-bottom: 14px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius);
+}
+.tile-fatura__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.tile-fatura__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tile-fatura__value {
+  font-size: 20px;
+  font-weight: 600;
+}
 .tile-actions {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
+}
+.tile-actions__sec {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 .form {
   display: flex;

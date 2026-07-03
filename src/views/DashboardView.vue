@@ -6,12 +6,14 @@ import { useWorkspaceStore } from "@/stores/workspace";
 import { useBudget } from "@/composables/useBudget";
 import {
   useCardBills,
+  useCardTransactionsMonth,
   useSubscriptions,
   useCategories,
   refreshMonthData,
   type CardBill,
 } from "@/composables/useData";
 import { ensureSubscriptionCharges } from "@/services/subscriptions";
+import { resolveTop } from "@/lib/categoryTree";
 import { formatBRL } from "@/lib/money";
 import { addMeses, competenciaDe, competenciaLabel } from "@/lib/competencia";
 
@@ -48,7 +50,6 @@ const {
   aPagar,
   recebidoMes,
   pagoMes,
-  faturasTotal,
   despesasEssenciais,
   percentEssenciais,
   despesasFixas,
@@ -70,22 +71,34 @@ function catNome(id: string) {
 function catCor(id: string) {
   return categories.value.find((c) => c.id === id)?.cor ?? "var(--text-muted)";
 }
+// Compras de cartão da competência = mês da FATURA (mês do pagamento). O gasto do
+// cartão é atribuído por competência, não pela data da compra — coerente com o
+// resto do dashboard (faturas, gasto no mês).
+const cardTxs = useCardTransactionsMonth(competencia);
+
 const despesasPorCategoria = computed(() => {
   const map = new Map<string, number>();
+  const add = (categoryId: string | undefined, valor: number) => {
+    // Agrega na categoria de TOPO (subcategorias somam no pai).
+    const top = resolveTop(categories.value, categoryId);
+    const k = top?.id ?? "";
+    map.set(k, (map.get(k) ?? 0) + valor);
+  };
+  // Despesas de caixa: por data (competência do mês) e só o previsto.
   for (const t of txs.value) {
-    if (t.tipo !== "despesa" || !t.previsto || t.cardId) continue;
-    const k = t.categoryId ?? "";
-    map.set(k, (map.get(k) ?? 0) + (t.valorPrevisto ?? t.valor));
+    if (t.tipo !== "despesa" || t.cardId || !t.previsto) continue;
+    add(t.categoryId, t.valorPrevisto ?? t.valor);
+  }
+  // Compras de cartão: pela competência da fatura (mês do pagamento), valor real.
+  for (const t of cardTxs.value) {
+    if (t.tipo !== "despesa") continue;
+    add(t.categoryId, t.valor);
   }
   const arr = [...map.entries()].map(([id, valor]) => ({
     nome: id ? catNome(id) : "Sem categoria",
     cor: id ? catCor(id) : "var(--text-muted)",
     valor,
   }));
-  // Cartões entram no orçamento via fatura (não pela compra) — bucket próprio.
-  if (faturasTotal.value > 0) {
-    arr.push({ nome: "Cartões (faturas)", cor: "var(--oren-capital, #2563eb)", valor: faturasTotal.value });
-  }
   return arr.filter((c) => c.valor > 0).sort((a, b) => b.valor - a.valor);
 });
 const maxCat = computed(() =>
@@ -202,9 +215,9 @@ function statusLabel(b: CardBill) {
 
       <!-- Gráfico 3: Despesas previstas por categoria -->
       <OrenCard class="comp">
-        <template #title>Despesas previstas por categoria — {{ competenciaLabel(competencia) }}</template>
+        <template #title>Despesas por categoria — {{ competenciaLabel(competencia) }}</template>
         <p v-if="despesasPorCategoria.length === 0" class="muted">
-          Sem despesas previstas neste mês.
+          Sem despesas neste mês.
         </p>
         <ul v-else class="comp__list">
           <li v-for="c in despesasPorCategoria" :key="c.nome" class="comp__row">
@@ -218,6 +231,10 @@ function statusLabel(b: CardBill) {
             <span class="comp__v">{{ formatBRL(c.valor) }}</span>
           </li>
         </ul>
+        <p v-if="despesasPorCategoria.length" class="comp__note">
+          Despesas de caixa previstas + compras de cartão pela competência da fatura
+          (mês do pagamento). Compras sem categoria aparecem em "Sem categoria".
+        </p>
       </OrenCard>
 
       <OrenCard style="margin-top: 20px">
@@ -390,6 +407,13 @@ function statusLabel(b: CardBill) {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.comp__note {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle, var(--border-default));
+  font-size: 12px;
+  color: var(--text-muted);
 }
 @media (max-width: 560px) {
   .comp__row {

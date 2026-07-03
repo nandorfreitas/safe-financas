@@ -14,6 +14,7 @@ import {
 } from "@/ui";
 import type { Column, SelectOption } from "@/ui";
 import MoneyInput from "@/components/MoneyInput.vue";
+import ImportCsvModal from "@/components/ImportCsvModal.vue";
 import {
   useCards,
   useInvoices,
@@ -71,6 +72,18 @@ const comprasDoMes = computed(() =>
   [...purchases.value]
     .filter((t) => t.competencia === competencia.value)
     .sort((a, b) => a.data.toMillis() - b.data.toMillis()),
+);
+
+// Import de CSV: hashes já existentes (dedup) e controle do modal.
+const importModal = ref(false);
+const hashesExistentes = computed(() =>
+  purchases.value.map((t) => t.importHash).filter((h): h is string => !!h),
+);
+// Compras comuns da competência (exclui cobranças de assinatura) — para "substituir".
+const substituiveis = computed(() =>
+  comprasDoMes.value
+    .filter((t) => t.id && !t.subscriptionId)
+    .map((t) => ({ id: t.id as string, valor: t.valor })),
 );
 
 const contas = computed(() =>
@@ -353,15 +366,26 @@ async function desfazerPagamento() {
       <!-- Compras -->
       <div class="section-head">
         <h3>Compras desta competência</h3>
-        <OrenButton
-          variant="primary"
-          size="sm"
-          :disabled="faturaPaga"
-          :title="faturaPaga ? 'Fatura paga — reabra para lançar novas compras.' : ''"
-          @click="abrirCompra"
-        >
-          Nova compra
-        </OrenButton>
+        <div class="section-head__actions">
+          <OrenButton
+            variant="ghost"
+            size="sm"
+            :disabled="faturaPaga"
+            :title="faturaPaga ? 'Fatura paga — reabra para importar.' : ''"
+            @click="importModal = true"
+          >
+            Importar fatura
+          </OrenButton>
+          <OrenButton
+            variant="primary"
+            size="sm"
+            :disabled="faturaPaga"
+            :title="faturaPaga ? 'Fatura paga — reabra para lançar novas compras.' : ''"
+            @click="abrirCompra"
+          >
+            Nova compra
+          </OrenButton>
+        </div>
       </div>
 
       <p v-if="comprasDoMes.length === 0" class="empty">
@@ -431,6 +455,16 @@ async function desfazerPagamento() {
         </OrenButton>
       </template>
     </OrenModal>
+
+    <!-- Import de CSV -->
+    <ImportCsvModal
+      v-model="importModal"
+      :card-id="cardId"
+      :dia-vencimento="card?.diaVencimento ?? 1"
+      :competencia="competencia"
+      :existing-hashes="hashesExistentes"
+      :substituiveis="substituiveis"
+    />
   </OrenPage>
 </template>
 
@@ -493,6 +527,11 @@ async function desfazerPagamento() {
 .section-head h3 {
   margin: 0;
   font-weight: 500;
+}
+.section-head__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .empty {
   color: var(--text-muted);

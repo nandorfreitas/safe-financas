@@ -5,8 +5,10 @@ import {
   getDoc,
   doc,
   serverTimestamp,
+  writeBatch,
   Timestamp,
 } from "firebase/firestore";
+import { db } from "@/firebase";
 import {
   transactionsRef,
   transactionRef,
@@ -20,8 +22,14 @@ import type {
   Visibilidade,
 } from "@/types/models";
 import { addMeses, parseCompetencia } from "@/lib/competencia";
+import { merchantKey } from "@/lib/categorize";
 import { ensureInvoice, applyRegistradoDelta } from "./invoices";
 import { ctx } from "./context";
+
+/** Chave de deduplicação de um lançamento importado. */
+export function importHashOf(data: Date, valor: number, descricao: string): string {
+  return `${data.toISOString().slice(0, 10)}|${valor}|${merchantKey(descricao)}`;
+}
 
 export interface TransactionInput {
   tipo: TipoTransacao;
@@ -125,6 +133,25 @@ export async function deleteTransaction(id: string): Promise<void> {
   await deleteDoc(transactionRef(wsId, id));
 }
 
+/**
+ * Define a categoria de vários lançamentos de uma vez (categorização em lote).
+ * Só grava o campo `categoryId` de cada um — não mexe em fatura/valorRegistrado
+ * (a categoria não altera valores). Retorna quantos foram atualizados.
+ */
+export async function categorizeTransactions(
+  entries: { id: string; categoryId: string }[],
+): Promise<number> {
+  const { wsId } = ctx();
+  const validas = entries.filter((e) => e.id && e.categoryId);
+  if (validas.length === 0) return 0;
+  const batch = writeBatch(db);
+  for (const e of validas) {
+    batch.update(transactionRef(wsId, e.id), { categoryId: e.categoryId });
+  }
+  await batch.commit();
+  return validas.length;
+}
+
 // ───────────────────────── Compras de cartão ─────────────────────────
 
 export interface CardPurchaseInput {
@@ -204,6 +231,80 @@ export async function createCardPurchase(input: CardPurchaseInput): Promise<stri
   }
 
   return compraId;
+}
+
+// ───────────────────────── Import de fatura (CSV) ─────────────────────────
+
+export interface ImportRow {
+  data: Date;
+  descricao: string;
+  /** Centavos, positivo (valor da despesa). */
+  valor: number;
+  categoryId?: string;
+  parcelaNum?: number;
+  parcelaTotal?: number;
+}
+
+/**
+ * Importa vários lançamentos de uma vez na fatura da competência (compras 1x).
+ * Grava `importHash` em cada um (dedup) e aplica um único delta no valorRegistrado.
+ * Se `remover` for informado, apaga esses lançamentos antes (modo "substituir"),
+ * descontando o valor deles do delta. Retorna quantos lançamentos foram criados.
+ */
+export async function importCardPurchases(params: {
+  cardId: string;
+  diaVencimento: number;
+  competencia: Competencia;
+  rows: ImportRow[];
+  /** Compras existentes a substituir (id + valor), para reescrever a fatura. */
+  remover?: { id: string; valor: number }[];
+}): Promise<number> {
+  const { wsId, uid } = ctx();
+  const remover = params.remover ?? [];
+  if (params.rows.length === 0 && remover.length === 0) return 0;
+  const origem = await resolveOrigem(wsId, uid, undefined, params.cardId);
+  const invoiceId = await ensureInvoice(
+    params.cardId,
+    params.competencia,
+    params.diaVencimento,
+  );
+
+  const batch = writeBatch(db);
+  let delta = 0;
+
+  // Remove as compras existentes (modo substituir).
+  for (const rem of remover) {
+    batch.delete(transactionRef(wsId, rem.id));
+    delta -= rem.valor;
+  }
+
+  for (const r of params.rows) {
+    const ref = doc(transactionsRef(wsId));
+    const data = clean({
+      tipo: "despesa" as TipoTransacao,
+      previsto: false,
+      realizado: true,
+      valor: r.valor,
+      data: Timestamp.fromDate(r.data),
+      cardId: params.cardId,
+      categoryId: r.categoryId || undefined,
+      competencia: params.competencia,
+      invoiceId,
+      fixa: false,
+      descricao: r.descricao,
+      parcelaNum: r.parcelaNum,
+      parcelaTotal: r.parcelaTotal,
+      importHash: importHashOf(r.data, r.valor, r.descricao),
+      criadoPor: uid,
+      createdAt: serverTimestamp(),
+      ...origem,
+    });
+    batch.set(ref, data as unknown as Transaction);
+    delta += r.valor;
+  }
+  await batch.commit();
+  await applyRegistradoDelta(params.cardId, invoiceId, delta);
+  return params.rows.length;
 }
 
 /** Remove uma compra de cartão e desfaz seu efeito no valorRegistrado da fatura. */

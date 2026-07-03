@@ -132,10 +132,18 @@ export interface Subscription {
   createdAt: Timestamp;
 }
 
+/** Dica de categorização aprendida: id do doc = chave do comerciante. */
+export interface CategoryHint {
+  id?: string;
+  categoryId: string;
+}
+
 export interface Category {
   id?: string;
   nome: string;
   tipo: TipoCategoria;
+  /** Categoria-pai; se definida, esta é uma subcategoria. */
+  parentId?: string;
   cor: string;
   /** Default: lançamentos desta categoria repetem nos próximos meses. */
   fixaPorPadrao: boolean;
@@ -175,6 +183,8 @@ export interface Transaction {
   loanId?: string;
   /** Se for cobrança de assinatura — vincula à assinatura-pai. */
   subscriptionId?: string;
+  /** Chave de deduplicação de importação (CSV/OFX): data|valor|comerciante. */
+  importHash?: string;
   /** Parcelamento. */
   compraId?: string;
   parcelaNum?: number;
