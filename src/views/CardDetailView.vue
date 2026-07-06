@@ -23,7 +23,11 @@ import {
   useCategories,
 } from "@/composables/useData";
 import { setValorPrevisto, pagarFatura, reabrirFatura } from "@/services/invoices";
-import { createCardPurchase, deleteCardPurchase } from "@/services/transactions";
+import {
+  createCardPurchase,
+  createCardCredit,
+  deleteCardPurchase,
+} from "@/services/transactions";
 import { ensureSubscriptionCharges } from "@/services/subscriptions";
 import { formatBRL } from "@/lib/money";
 import {
@@ -214,13 +218,73 @@ async function salvarCompra() {
 }
 
 async function removerCompra(t: Transaction) {
-  if (!confirm("Excluir esta compra/parcela?")) return;
+  const ehCredito = t.valor < 0;
+  if (!confirm(ehCredito ? "Excluir este crédito/estorno?" : "Excluir esta compra/parcela?")) return;
   try {
     await deleteCardPurchase(t);
-    toast.success("Compra removida.");
+    toast.success(ehCredito ? "Crédito removido." : "Compra removida.");
   } catch (e) {
     toast.error("Não foi possível remover.");
     console.error(e);
+  }
+}
+
+// ── Crédito / estorno (abate a fatura) ──
+const creditoModal = ref(false);
+const salvandoCredito = ref(false);
+const credito = reactive({
+  descricao: "",
+  valor: 0,
+  categoryId: "",
+  dataISO: new Date().toISOString().slice(0, 10),
+});
+
+function abrirCredito() {
+  if (faturaPaga.value) {
+    toast.error("Fatura paga — reabra para lançar créditos.");
+    return;
+  }
+  Object.assign(credito, {
+    descricao: "",
+    valor: 0,
+    categoryId: "",
+    dataISO: new Date().toISOString().slice(0, 10),
+  });
+  creditoModal.value = true;
+}
+
+async function salvarCredito() {
+  if (!card.value) return;
+  if (faturaPaga.value) {
+    toast.error("Fatura paga — reabra para lançar créditos.");
+    return;
+  }
+  if (!credito.descricao.trim()) {
+    toast.error("Informe uma descrição.");
+    return;
+  }
+  if (credito.valor <= 0) {
+    toast.error("Informe o valor do crédito (positivo).");
+    return;
+  }
+  salvandoCredito.value = true;
+  try {
+    await createCardCredit({
+      cardId: cardId.value,
+      diaVencimento: card.value.diaVencimento,
+      competencia: competencia.value,
+      valor: credito.valor,
+      descricao: credito.descricao.trim(),
+      categoryId: credito.categoryId || undefined,
+      data: new Date(credito.dataISO + "T12:00:00"),
+    });
+    toast.success("Crédito/estorno lançado.");
+    creditoModal.value = false;
+  } catch (e) {
+    toast.error("Não foi possível lançar o crédito.");
+    console.error(e);
+  } finally {
+    salvandoCredito.value = false;
   }
 }
 
@@ -377,6 +441,15 @@ async function desfazerPagamento() {
             Importar fatura
           </OrenButton>
           <OrenButton
+            variant="ghost"
+            size="sm"
+            :disabled="faturaPaga"
+            :title="faturaPaga ? 'Fatura paga — reabra para lançar créditos.' : ''"
+            @click="abrirCredito"
+          >
+            Crédito/estorno
+          </OrenButton>
+          <OrenButton
             variant="primary"
             size="sm"
             :disabled="faturaPaga"
@@ -394,6 +467,10 @@ async function desfazerPagamento() {
 
       <OrenTable v-else :columns="columns" :rows="comprasDoMes">
         <template #cell-data="{ row }">{{ fmtData(row.data) }}</template>
+        <template #cell-descricao="{ row }">
+          {{ row.descricao }}
+          <OrenBadge v-if="row.valor < 0" variant="success">crédito</OrenBadge>
+        </template>
         <template #cell-categoryId="{ value }">{{ nomeCategoria(value as string) }}</template>
         <template #cell-parcelaNum="{ row }">
           <span v-if="row.parcelaTotal && row.parcelaTotal > 1">
@@ -401,7 +478,9 @@ async function desfazerPagamento() {
           </span>
           <span v-else>—</span>
         </template>
-        <template #cell-valor="{ row }">{{ formatBRL(row.valor) }}</template>
+        <template #cell-valor="{ row }">
+          <span :class="{ 'val-credito': row.valor < 0 }">{{ formatBRL(row.valor) }}</span>
+        </template>
         <template #cell-id="{ row }">
           <div class="row-actions">
             <OrenButton size="sm" variant="danger" @click="removerCompra(row)">Excluir</OrenButton>
@@ -434,6 +513,33 @@ async function desfazerPagamento() {
         <OrenButton variant="ghost" @click="close">Cancelar</OrenButton>
         <OrenButton variant="primary" :loading="salvandoCompra" @click="salvarCompra">
           Lançar
+        </OrenButton>
+      </template>
+    </OrenModal>
+
+    <!-- Modal crédito/estorno -->
+    <OrenModal v-model="creditoModal" title="Crédito / estorno na fatura">
+      <div class="form">
+        <OrenInput
+          v-model="credito.descricao"
+          label="Descrição"
+          placeholder="Ex.: Cashback, Estorno compra X"
+        />
+        <MoneyInput v-model="credito.valor" label="Valor do crédito (R$)" />
+        <OrenSelect v-model="credito.categoryId" label="Categoria (opcional)" :options="categoriaOptions" />
+        <div class="field">
+          <label>Data do crédito</label>
+          <input v-model="credito.dataISO" type="date" class="date-input" />
+        </div>
+        <p class="hint">
+          O crédito <b>abate</b> o valor da fatura de
+          <b>{{ competenciaLabel(competencia) }}</b> (entra como valor negativo).
+        </p>
+      </div>
+      <template #footer="{ close }">
+        <OrenButton variant="ghost" @click="close">Cancelar</OrenButton>
+        <OrenButton variant="primary" :loading="salvandoCredito" @click="salvarCredito">
+          Lançar crédito
         </OrenButton>
       </template>
     </OrenModal>
@@ -540,6 +646,9 @@ async function desfazerPagamento() {
 .row-actions {
   display: flex;
   justify-content: flex-end;
+}
+.val-credito {
+  color: var(--action-primary, #1f7a4d);
 }
 .form {
   display: flex;

@@ -5,7 +5,8 @@ import type { SelectOption } from "@/ui";
 import { useCategories, useCategoryHints } from "@/composables/useData";
 import { parseCsv, parseValorBR, parseDataBR } from "@/lib/csv";
 import { extractPdfText } from "@/lib/pdf";
-import { getStatementParser, STATEMENT_PARSERS } from "@/lib/statements";
+import { extractXlsxRows } from "@/lib/xlsx";
+import { getStatementParser, parseXlsxStatement, STATEMENT_PARSERS } from "@/lib/statements";
 import { suggestCategoryId, merchantKey, pareceCredito, extractParcela } from "@/lib/categorize";
 import { categoryOptions } from "@/lib/categoryTree";
 import { importCardPurchases, importHashOf, type ImportRow } from "@/services/transactions";
@@ -40,12 +41,13 @@ const hashSet = computed(() => new Set(props.existingHashes));
 const anoFallback = computed(() => Number(props.competencia.slice(0, 4)));
 
 // ── Estado ──
-type Mode = "csv" | "pdf";
+type Mode = "csv" | "pdf" | "xlsx";
 const mode = ref<Mode>("csv");
 const fileName = ref("");
 const lendoPdf = ref(false);
 const banco = ref("mercadopago");
 const pdfText = ref("");
+const xlsxRows = ref<string[][]>([]);
 
 const bancoOptions = STATEMENT_PARSERS.map((p) => ({ label: p.label, value: p.id }));
 
@@ -94,6 +96,7 @@ function reset() {
   lendoPdf.value = false;
   banco.value = "mercadopago";
   pdfText.value = "";
+  xlsxRows.value = [];
   headers.value = [];
   rawRows.value = [];
   mapping.data = -1;
@@ -113,6 +116,10 @@ async function onFile(ev: Event) {
   if (!file) return;
   fileName.value = file.name;
   const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+  const isXlsx =
+    /\.xlsx$/i.test(file.name) ||
+    file.type.includes("spreadsheetml") ||
+    file.type.includes("excel");
 
   if (isPdf) {
     mode.value = "pdf";
@@ -123,6 +130,23 @@ async function onFile(ev: Event) {
       reparsePdf();
     } catch (e) {
       toast.error("Falha ao ler o PDF.");
+      console.error(e);
+      sourceRows.value = [];
+    } finally {
+      lendoPdf.value = false;
+    }
+    return;
+  }
+
+  if (isXlsx) {
+    mode.value = "xlsx";
+    headers.value = [];
+    lendoPdf.value = true;
+    try {
+      xlsxRows.value = await extractXlsxRows(file);
+      reparseXlsx();
+    } catch (e) {
+      toast.error("Falha ao ler a planilha.");
       console.error(e);
       sourceRows.value = [];
     } finally {
@@ -159,6 +183,23 @@ function reparsePdf() {
   }));
   if (linhas.length === 0) {
     toast.error("Nenhum lançamento reconhecido — tente outro banco/formato.");
+  }
+  autoSign();
+  rebuild();
+}
+
+function reparseXlsx() {
+  const linhas = parseXlsxStatement(xlsxRows.value);
+  sourceRows.value = linhas.map((l) => ({
+    data: l.data,
+    descricao: l.descricao,
+    valorSigned: l.valor,
+    credito: l.credito,
+    parcelaNum: l.parcelaNum,
+    parcelaTotal: l.parcelaTotal,
+  }));
+  if (linhas.length === 0) {
+    toast.error("Nenhum lançamento reconhecido na planilha.");
   }
   autoSign();
   rebuild();
@@ -294,22 +335,27 @@ async function confirmar() {
 </script>
 
 <template>
-  <OrenModal v-model="open" size="lg" title="Importar fatura (CSV ou PDF)">
+  <OrenModal v-model="open" size="lg" title="Importar fatura (Excel, CSV ou PDF)">
     <div class="imp">
       <p class="hint">
-        Importa para a fatura de <b>{{ competenciaLabel(competencia) }}</b>. Aceita CSV
-        (extrato) ou PDF da fatura. No PDF a extração é aproximada — revise antes de importar.
+        Importa para a fatura de <b>{{ competenciaLabel(competencia) }}</b>. Aceita
+        planilha <b>.xlsx</b> (recomendado), CSV (extrato) ou PDF da fatura. No PDF a
+        extração é aproximada — revise antes de importar.
       </p>
 
-      <label class="file">
-        <input type="file" accept=".csv,.pdf,text/csv,application/pdf" @change="onFile" />
-      </label>
-
-      <div v-if="mode === 'pdf' && pdfText" class="controls">
+      <div v-if="mode !== 'xlsx'" class="controls">
         <OrenSelect v-model="banco" label="Banco / formato do PDF" :options="bancoOptions" />
       </div>
 
-      <p v-if="lendoPdf" class="hint">Lendo PDF…</p>
+      <label class="file">
+        <input
+          type="file"
+          accept=".csv,.pdf,.xlsx,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          @change="onFile"
+        />
+      </label>
+
+      <p v-if="lendoPdf" class="hint">Lendo arquivo…</p>
 
       <template v-if="mode === 'csv' && headers.length">
         <div class="map">

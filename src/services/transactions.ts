@@ -233,6 +233,54 @@ export async function createCardPurchase(input: CardPurchaseInput): Promise<stri
   return compraId;
 }
 
+/**
+ * Lança um CRÉDITO/ESTORNO na fatura (ex.: cashback, estorno de compra,
+ * devolução). É uma transação de cartão com `valor` NEGATIVO — abate o
+ * valorRegistrado da fatura, encaixando nos mesmos cálculos das compras.
+ * Retorna o id da transação criada.
+ */
+export async function createCardCredit(input: {
+  cardId: string;
+  diaVencimento: number;
+  competencia: Competencia;
+  /** Centavos, positivo — lançado como abatimento (negativo) na fatura. */
+  valor: number;
+  descricao: string;
+  categoryId?: string;
+  /** Data do crédito. */
+  data: Date;
+}): Promise<string> {
+  const { wsId, uid } = ctx();
+  const origem = await resolveOrigem(wsId, uid, undefined, input.cardId);
+  const invoiceId = await ensureInvoice(
+    input.cardId,
+    input.competencia,
+    input.diaVencimento,
+  );
+  const valor = -Math.abs(input.valor);
+
+  const data = clean({
+    tipo: "despesa" as TipoTransacao,
+    previsto: false,
+    realizado: true,
+    valor,
+    data: Timestamp.fromDate(input.data),
+    cardId: input.cardId,
+    categoryId: input.categoryId,
+    fixa: false,
+    competencia: input.competencia,
+    invoiceId,
+    descricao: input.descricao,
+    criadoPor: uid,
+    createdAt: serverTimestamp(),
+    ...origem,
+  });
+
+  const ref = await addDoc(transactionsRef(wsId), data as unknown as Transaction);
+  await applyRegistradoDelta(input.cardId, invoiceId, valor);
+  return ref.id;
+}
+
 // ───────────────────────── Import de fatura (CSV) ─────────────────────────
 
 export interface ImportRow {

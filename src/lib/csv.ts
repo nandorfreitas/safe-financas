@@ -75,8 +75,13 @@ export function parseValorBR(raw: string): number | null {
   if (!s) return null;
 
   if (s.includes(",") && s.includes(".")) {
-    // 1.234,56 → ponto milhar, vírgula decimal
-    s = s.replace(/\./g, "").replace(",", ".");
+    // Ambos presentes: o ÚLTIMO separador é o decimal. Cobre BR ("1.234,56") e
+    // US ("1,234.56" — formato que o SheetJS gera ao ler .xlsx).
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      s = s.replace(/\./g, "").replace(",", "."); // vírgula decimal (BR)
+    } else {
+      s = s.replace(/,/g, ""); // ponto decimal (US)
+    }
   } else if (s.includes(",")) {
     s = s.replace(",", ".");
   } else if (s.includes(".")) {
