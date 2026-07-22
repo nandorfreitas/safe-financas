@@ -140,14 +140,24 @@ function statusLabel(b: CardBill) {
         </OrenButton>
       </div>
 
-      <!-- Destaque: a equação da projeção (Saldo + A receber − A pagar) -->
-      <section class="hero" :class="projecaoPositiva ? 'hero--pos' : 'hero--neg'">
-        <div class="hero__top">
-          <span class="hero__label">Projeção de saldo final</span>
-          <span class="hero__value">{{ formatBRL(projecaoSaldoFinal) }}</span>
-          <span class="hero__hint">
-            se tudo ocorrer como previsto em {{ competenciaLabel(competencia) }}
-          </span>
+      <!-- Destaque: Saldo atual efetivo × Projeção prevista -->
+      <section class="hero">
+        <div class="hero__headline">
+          <div class="hero__metric">
+            <span class="hero__label">Saldo atual efetivo</span>
+            <span class="hero__value">{{ formatBRL(saldoAtual) }}</span>
+            <span class="hero__hint">saldo real das contas hoje</span>
+          </div>
+          <span class="hero__arrow">→</span>
+          <div class="hero__metric">
+            <span class="hero__label">Projeção prevista</span>
+            <span class="hero__value" :class="projecaoPositiva ? 'val-pos' : 'val-neg'">
+              {{ formatBRL(projecaoSaldoFinal) }}
+            </span>
+            <span class="hero__hint">
+              se tudo ocorrer como previsto em {{ competenciaLabel(competencia) }}
+            </span>
+          </div>
         </div>
         <div class="bridge">
           <div class="bridge__item">
@@ -156,12 +166,12 @@ function statusLabel(b: CardBill) {
           </div>
           <span class="bridge__op">+</span>
           <div class="bridge__item">
-            <span class="bridge__k">A receber</span>
+            <span class="bridge__k">A receber (previsto)</span>
             <span class="bridge__v val-pos">{{ formatBRL(aReceber) }}</span>
           </div>
           <span class="bridge__op">−</span>
           <div class="bridge__item">
-            <span class="bridge__k">A pagar</span>
+            <span class="bridge__k">A pagar (previsto)</span>
             <span class="bridge__v val-neg">{{ formatBRL(aPagar) }}</span>
           </div>
         </div>
@@ -273,7 +283,7 @@ function statusLabel(b: CardBill) {
 </template>
 
 <style scoped>
-/* ── Destaque (hero): a equação da projeção ── */
+/* ── Destaque (hero): Saldo atual efetivo × Projeção prevista ── */
 .hero {
   background: var(--surface-raised);
   border: 1px solid var(--border-default);
@@ -284,25 +294,22 @@ function statusLabel(b: CardBill) {
   flex-direction: column;
   gap: 18px;
 }
-/* Tom suave conforme o sinal da projeção. */
-.hero--pos {
-  background: rgba(31, 122, 77, 0.07);
-  border-color: rgba(31, 122, 77, 0.35);
+.hero__headline {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
 }
-.hero--neg {
-  background: rgba(180, 35, 24, 0.07);
-  border-color: rgba(180, 35, 24, 0.35);
-}
-.hero--pos .hero__value {
-  color: #1f7a4d;
-}
-.hero--neg .hero__value {
-  color: #b42318;
-}
-.hero__top {
+.hero__metric {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1 1 220px;
+}
+.hero__arrow {
+  font-size: 28px;
+  color: var(--text-muted);
+  flex: none;
 }
 .hero__label {
   font-size: 12px;
@@ -311,13 +318,19 @@ function statusLabel(b: CardBill) {
   color: var(--text-muted);
 }
 .hero__value {
-  font-size: 40px;
+  font-size: 36px;
   font-weight: 700;
   line-height: 1.1;
 }
 .hero__hint {
   font-size: 13px;
   color: var(--text-muted);
+}
+@media (max-width: 560px) {
+  .hero__arrow {
+    transform: rotate(90deg);
+    align-self: center;
+  }
 }
 .bridge {
   display: flex;

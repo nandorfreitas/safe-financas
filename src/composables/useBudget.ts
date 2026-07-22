@@ -42,19 +42,19 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
     cashTx.value.filter(pred).reduce((s, t) => s + val(t), 0);
 
   // Faturas de cartão desta competência (já vêm filtradas pelo mês).
-  // PROJEÇÃO (previsão antecipada): o cartão usa o valor REAL registrado, não a meta —
-  // é o que de fato será pago. Abertas e pagas entram pelo registrado.
-  const faturasAbertas = computed(() =>
+  // A PROJEÇÃO é sobre o PREVISTO: o cartão entra pela META (valorPrevisto), igual
+  // ao que a tela de Transações mostra — não pelo valorRegistrado (o "a pagar" real).
+  const faturasAbertasPrevisto = computed(() =>
     faturas.value
       .filter((i) => i.status === "aberta")
-      .reduce((s, i) => s + i.valorRegistrado, 0),
+      .reduce((s, i) => s + i.valorPrevisto, 0),
   );
   const faturasPagas = computed(() =>
     faturas.value
       .filter((i) => i.status === "paga")
       .reduce((s, i) => s + i.valorRegistrado, 0),
   );
-  // Meta total (previsto) de todas as faturas do mês — só para o plano × real.
+  // Meta total (previsto) de todas as faturas do mês — para o plano × real.
   const faturasTotal = computed(() =>
     faturas.value.reduce((s, i) => s + i.valorPrevisto, 0),
   );
@@ -66,7 +66,8 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
   const aPagarLancamentos = computed(() =>
     sumP((t) => t.tipo === "despesa" && t.previsto && !t.realizado, valPrev),
   );
-  const aPagar = computed(() => aPagarLancamentos.value + faturasAbertas.value);
+  // A pagar (previsto): lançamentos de caixa pendentes + faturas abertas pela META.
+  const aPagar = computed(() => aPagarLancamentos.value + faturasAbertasPrevisto.value);
 
   const saldoAtual = saldoContas;
   const projecaoSaldoFinal = computed(
@@ -120,7 +121,7 @@ export function useBudget(competencia: MaybeRefOrGetter<Competencia>) {
     aReceber,
     aPagar,
     aPagarLancamentos,
-    faturasAbertas,
+    faturasAbertasPrevisto,
     faturasPagas,
     faturasTotal,
     projecaoSaldoFinal,
